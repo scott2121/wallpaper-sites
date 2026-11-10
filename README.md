@@ -4,10 +4,10 @@
 
 **[ギャラリーを開く](https://scott2121.github.io/wallpaper-sites/)** · **[壁紙の追加方法](CONTRIBUTING.md)**
 
-| 壁紙 | 状態 | 構想 |
+| 壁紙 | 状態 | 内容 |
 | --- | --- | --- |
-| 夕日 / Living Sunset | 計画中 | 草原や街の夕景を生成し、日が沈むにつれて空の色や反射が変化する |
-| 焚き火 / Campfire | 計画中 | 揺れる炎と舞い上がる火の粉を眺めながら、薪をくべられる |
+| [夕日 / Living Sunset](https://scott2121.github.io/wallpaper-sites/wallpapers/living-sunset/) | 公開中 | 草原や街の夕景を生成し、日が沈むにつれて空の色や反射が変化する |
+| [焚き火 / Campfire](https://scott2121.github.io/wallpaper-sites/wallpapers/campfire/) | 公開中 | 揺れる炎と舞い上がる火の粉を眺めながら、薪をくべられる |
 
 ## リポジトリの構成
 
