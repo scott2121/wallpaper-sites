@@ -370,7 +370,8 @@ function addLog(o){
  const used=logs.map(l=>l.slot),i=SL.findIndex((s,j)=>!used.includes(j));if(i<0||logs.length>=MAXL)return false;
  const s=SL[i];
  logs.push(Object.assign({slot:i,x:s[0]+(R()-.5)*.04,y:s[1],a:s[2]+(R()-.5)*.08,len:s[3]*(.92+R()*.16),front:s[4],d:.14+R()*.04,seed:R()*1e9|0,flip:R()<.5?1:-1,
-  heat:0,char:0,fuel:1,burn:1/(95+R()*70),age:0,oy:reduced?0:1.5,vy:0,oa:(R()-.5)*1.2,land:reduced?1:0,spr:null},o));
+  heat:0,char:0,fuel:1,burn:1/(95+R()*70),age:0,oy:reduced?0:1.5,vy:0,oa:(R()-.5)*1.2,land:reduced?1:0,
+  impactPending:o===undefined,spr:null},o));
  logs.sort((a,b)=>a.slot-b.slot);feedT=0;return true}
 [[.9,.6,.7],[.8,.5,.8],[.6,.3,.9],[.5,.2,1]].forEach(v=>addLog({heat:v[0],char:v[1],fuel:v[2],oy:0,land:1,age:1}));
 
@@ -457,7 +458,7 @@ function fallback(dt,wind,fi){
   x2.drawImage(p.sm?bSmoke:k<.4?bHot:bWarm,p.x-s,p.y-s,s*2,s*2)}
  x2.globalAlpha=1;x2.globalCompositeOperation='source-over'}
 
-/* ---------- opt-in synthesized crackle ---------- */
+/* ---------- opt-in synthesized sound ---------- */
 let AC=null,master,nb,snd=false;
 function initAudio(){try{
  AC=new(window.AudioContext||window.webkitAudioContext)();
@@ -470,15 +471,96 @@ function pop(){const t=AC.currentTime,s=AC.createBufferSource(),f=AC.createBiqua
  const v=.05+Math.pow(R(),3)*.6,d=.008+R()*.05;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);
  s.connect(f);f.connect(g);g.connect(master);s.start(t,R()*1.8,d+.02)}
 
+function canPlaySound(){
+ return snd&&AC?.state==='running'&&!paused&&!document.hidden;
+}
+
+function syncAudio(){
+ if(!AC)return;
+ const visible=!paused&&!document.hidden;
+ const volume=visible&&snd ? .5 : 0;
+ const now=AC.currentTime;
+ master.gain.cancelScheduledValues(now);
+ master.gain.setTargetAtTime(volume,now,volume>0 ? .14 : .035);
+ if(!visible)AC.suspend().catch(()=>{});
+ else if(snd)AC.resume().catch(()=>{});
+}
+
+function soundEnvelope(gain,when,level,attack,duration){
+ gain.setValueAtTime(.0001,when);
+ gain.exponentialRampToValueAtTime(level,when+attack);
+ gain.exponentialRampToValueAtTime(.0001,when+duration);
+}
+
+function noiseSweep(when,{from,to,peak=to,level,attack,duration,q=.8}){
+ const source=AC.createBufferSource(),filter=AC.createBiquadFilter(),gain=AC.createGain();
+ source.buffer=nb;
+ filter.type='bandpass';
+ filter.Q.value=q;
+ filter.frequency.setValueAtTime(from,when);
+ filter.frequency.exponentialRampToValueAtTime(peak,when+attack);
+ filter.frequency.exponentialRampToValueAtTime(to,when+duration);
+ soundEnvelope(gain.gain,when,level,attack,duration);
+ source.connect(filter);filter.connect(gain);gain.connect(master);
+ source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect()};
+ source.start(when,R()*(nb.duration-duration),duration);
+}
+
+function woodTone(when,frequency,level,duration){
+ const tone=AC.createOscillator(),gain=AC.createGain();
+ tone.frequency.setValueAtTime(frequency,when);
+ tone.frequency.exponentialRampToValueAtTime(frequency*.8,when+duration);
+ soundEnvelope(gain.gain,when,level,.004,duration);
+ tone.connect(gain);gain.connect(master);
+ tone.onended=()=>{tone.disconnect();gain.disconnect()};
+ tone.start(when);tone.stop(when+duration);
+}
+
+function woodImpact(speed){
+ if(!canPlaySound())return;
+ const when=AC.currentTime,weight=Math.min(1,Math.max(.36,speed/4));
+ const pitch=100+R()*37;
+ woodTone(when,pitch,.22*weight,.17);
+ woodTone(when,pitch*2.42,.09*weight,.095);
+ noiseSweep(when,{from:1100,to:560,level:.21*weight,attack:.004,duration:.073,q:1.3});
+ noiseSweep(when+.055,{from:2600,to:1350,level:.14*weight,attack:.002,duration:.049,q:1.5});
+}
+
+function oilTrickle(){
+ if(!canPlaySound())return;
+ const when=AC.currentTime;
+ noiseSweep(when,{from:1750,peak:2480,to:980,level:.21,attack:.046,duration:.27,q:1.25});
+ for(const delay of [.041,.105,.173]){
+  noiseSweep(when+delay,{from:1400,to:630,level:.16,attack:.004,duration:.055,q:2.4});
+ }
+}
+
+function oilFlare(){
+ if(!canPlaySound())return;
+ const level=reduced ? .78 : 1;
+ const when=AC.currentTime;
+ noiseSweep(when,{from:240,peak:780,to:345,level:.42*level,attack:.068,duration:.67,q:.7});
+ noiseSweep(when+.018,{from:790,peak:1410,to:490,level:.19*level,attack:.08,duration:.49,q:.6});
+}
+
 /* ---------- simulation + render ---------- */
 function render(dt){
  T+=dt*(reduced?.45:1);
  const wind=S.wind+Math.sin(T*.31)*.08+Math.sin(T*.13+2)*.06;
  let heat=0,fuel=0;
  for(let i=logs.length;i--;){const l=logs[i];l.age+=dt;
+  let impactSpeed=l.land?2.4:null;
   if(!l.land){l.vy+=7*dt;l.oy-=l.vy*dt;
-   if(l.oy<=0){l.oy=0;if(l.vy>1.6){l.vy*=-.28;if(I>.12)for(let j=0;j<4;j++)fireSpark(.7)}else l.land=1}}
+   if(l.oy<=0){
+    l.oy=0;impactSpeed=l.vy;
+    if(l.vy>1.6){l.vy*=-.28;if(I>.12)for(let j=0;j<4;j++)fireSpark(.7)}
+    else l.land=1;
+   }}
   else{l.heat=Math.min(1,l.heat+dt*(.012+.03*I+.08*boost));l.char=Math.min(1,l.char+dt*l.heat*.035);l.fuel-=dt*l.heat*l.burn}
+  if(dt>0&&l.impactPending&&impactSpeed!==null){
+   l.impactPending=false;
+   woodImpact(impactSpeed);
+  }
   if(l.fuel<=0){logs.splice(i,1);continue}
   if(l.land)heat+=l.heat*Math.min(1,l.fuel*4);
   fuel+=l.fuel}
@@ -487,8 +569,10 @@ function render(dt){
  if(pourAge!==null){
   const previous=pourAge;
   pourAge+=dt;
+  if(previous===0&&dt>0)oilTrickle();
   if(previous<.29&&pourAge>=.29){
    bGoal=Math.max(bGoal,reduced?.35:1.18);
+   oilFlare();
    for(let i=0;i<(reduced?3:16);i++)fireSpark(.75+R()*.65);
   }
   if(pourAge>.62)pourAge=null;
@@ -529,7 +613,7 @@ function render(dt){
  x2.globalCompositeOperation='source-over';
  drawPour();
 
- if(snd&&AC&&dt&&R()<dt*(1.5+9*Math.min(1.3,fi)))pop();
+ if(dt&&canPlaySound()&&R()<dt*(1.5+9*Math.min(1.3,fi)))pop();
  statT-=dt;if(statT<=0){statT=.5;$('stat').textContent=`薪 ${logs.length}/${MAXL}本 ・ 残りの燃料 ${fuel.toFixed(1)}本分`}
 }
 function tick(now){
@@ -575,7 +659,7 @@ const pour=()=>{
  say(paused?'油をかける演出は再開すると始まります':'油をかけました');
 };
 const togglePause=()=>{paused=!paused;$('pause').setAttribute('aria-pressed',paused);$('pause').textContent=paused?'再開':'一時停止';
- if(paused)stop();else start();if(AC)try{paused?AC.suspend():snd&&AC.resume()}catch(e){}};
+ if(paused)stop();else start();syncAudio()};
 const de=document.documentElement,rq=de.requestFullscreen||de.webkitRequestFullscreen,ex=document.exitFullscreen||document.webkitExitFullscreen;
 const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
 const fsUpd=()=>{if(rq)$('fs').textContent=fsEl()?'全画面を終了':'全画面'};
@@ -587,7 +671,7 @@ $('oil').onclick=pour;
 $('auto').checked=S.auto;$('auto').onchange=e=>{S.auto=e.target.checked;save()};
 $('wind').value=Math.round(S.wind*100);$('wind').oninput=e=>{S.wind=e.target.value/100;save()};
 $('snd').onclick=()=>{snd=!snd;if(snd&&!AC&&!initAudio()){snd=false;say('この環境では音声を利用できません')}
- if(AC){try{if(snd&&!paused)AC.resume()}catch(e){}master.gain.setTargetAtTime(snd?.5:0,AC.currentTime,.2)}
+ syncAudio();
  $('snd').setAttribute('aria-pressed',snd);$('snd').textContent=snd?'音: オン':'音: オフ'};
 c2.addEventListener('pointerdown',e=>{drag={x:e.clientX,w:S.wind};try{c2.setPointerCapture(e.pointerId)}catch(_){}});
 c2.addEventListener('pointermove',e=>{if(!drag)return;S.wind=Math.max(-1,Math.min(1,drag.w+(e.clientX-drag.x)/W*2.5));$('wind').value=Math.round(S.wind*100)});
@@ -599,7 +683,7 @@ addEventListener('keydown',e=>{
  if(e.target.matches&&e.target.matches('input'))return;
  if(k==='h')setSettingsOpen(settings.hidden);else if(k==='l')feed();else if(k==='a')flare();else if(k==='p')togglePause();else if(k==='f')toggleFs();
 });
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stop();if(AC)try{AC.suspend()}catch(e){}}else{start();if(AC&&snd&&!paused)try{AC.resume()}catch(e){}}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else start();syncAudio()});
 addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(resize,120)});
 if(paused){$('pause').setAttribute('aria-pressed','true');$('pause').textContent='再開'}
 resize();wake();start();
