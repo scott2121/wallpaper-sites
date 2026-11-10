@@ -81,7 +81,7 @@ const logs=[],SP=[],FP=[],EM=[];
 // Each lane stores the position and strength of the hot wood beneath it.
 const fireRoots=new Float32Array(9);
 const fireLaneWidth=.30;
-let pourX=0,pourY=.15;
+let pourX=0,pourY=.15,oilX=0,oilY=0,oilFlashAge=Infinity;
 /* slots: x, y(up), angle, length, front — units of U around the fire base */
 const SL=[[-.06,.065,.06,1.05,1],[.17,.135,-.25,.8,1],[-.26,.25,-.85,.8,0],[.27,.25,.85,.8,0],[.05,.2,.28,.85,1],[-.1,.31,-.5,.7,0],[.12,.34,.55,.7,0]];
 {
@@ -109,7 +109,7 @@ void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);gl_Position=vec4(p*2.-
 const FS=`#version 300 es
 precision highp float;
 uniform vec2 uC;uniform float uU,uT,uI,uW,uF;
-uniform vec3 uRoots[3];
+uniform vec3 uRoots[3],uOil;
 out vec4 o;
 float h(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
@@ -147,16 +147,24 @@ vec4 flameAt(vec2 p,vec3 root,float seed,float scale,float turbulence){
  float width=.12+.17*heat;
  vec2 field=flameField(p-root.xy,seed,height,width);
  float temperature=field.y*(.83+.17*heat);
- vec3 amber=mix(vec3(.81,.23,.046),vec3(1.,.66,.24),smoothstep(.11,.62,temperature));
- vec3 color=mix(amber,vec3(1.,.94,.76),smoothstep(.55,.90,temperature));
- float alpha=(1.-exp(-2.3*field.x*(.38+.62*heat)*turbulence))*.91;
+ vec3 amber=mix(vec3(.85,.25,.048),vec3(1.,.72,.31),smoothstep(.09,.59,temperature));
+ vec3 color=mix(amber,vec3(1.,.97,.84),smoothstep(.48,.86,temperature));
+ float alpha=(1.-exp(-2.55*field.x*(.38+.62*heat)*turbulence))*.93;
  return vec4(color*alpha,alpha);
+}
+vec4 oilFlame(vec2 p,float turbulence){
+ float flash=uOil.z;
+ if(flash<.01)return vec4(0.);
+ vec2 field=flameField(p-uOil.xy,11.4,(.43+1.04*flash)*(.88+.22*turbulence),.14+.25*flash);
+ float a=(1.-exp(-3.9*field.x))*flash;
+ vec3 color=mix(vec3(1.,.38,.067),vec3(1.,.99,.89),smoothstep(.08,.77,field.y));
+ return vec4(color*a,a);
 }
 void main(){
  vec2 p=(gl_FragCoord.xy-uC)/uU;
  float heat=uRoots[0].z+uRoots[1].z+uRoots[2].z;
- if(heat<.01||p.y<-.15||p.y>2.8||abs(p.x)>1.35+abs(uW)*.26*p.y*p.y){o=vec4(0.);return;}
- vec2 center=(uRoots[0].xy*uRoots[0].z+uRoots[1].xy*uRoots[1].z+uRoots[2].xy*uRoots[2].z)/heat;
+ if(heat+uOil.z<.01||p.y<-.15||p.y>2.8||abs(p.x)>1.35+abs(uW)*.26*p.y*p.y){o=vec4(0.);return;}
+ vec2 center=(uRoots[0].xy*uRoots[0].z+uRoots[1].xy*uRoots[1].z+uRoots[2].xy*uRoots[2].z)/max(heat,.01);
 
  // Wind deflects the rising plume while leaving the base on the wood.
  vec2 s=p-center;
@@ -170,8 +178,11 @@ void main(){
  vec4 layers=middleFlame+farFlame*(1.-middleFlame.a);
  layers=nearFlame+layers*(1.-nearFlame.a);
  float burn=smoothstep(.025,.62,heat);
- float a=layers.a*burn;
- vec3 flame=layers.rgb*burn;
+ layers*=burn;
+ vec4 flash=oilFlame(p,w);
+ layers=flash+layers*(1.-flash.a);
+ float a=layers.a;
+ vec3 flame=layers.rgb;
 
  // smoke: wider threshold and gentler warp for softer breakup
  float sw=.21+.28*max(s.y,0.);
@@ -194,7 +205,7 @@ try{
   const sh=(t,s)=>{const o=g.createShader(t);g.shaderSource(o,s);g.compileShader(o);if(!g.getShaderParameter(o,g.COMPILE_STATUS))throw Error(g.getShaderInfoLog(o));return o};
   const p=g.createProgram();g.attachShader(p,sh(g.VERTEX_SHADER,VS));g.attachShader(p,sh(g.FRAGMENT_SHADER,FS));g.linkProgram(p);
   if(!g.getProgramParameter(p,g.LINK_STATUS))throw Error('link');
-  g.useProgram(p);for(const k of['uC','uU','uT','uI','uW','uF'])UN[k]=g.getUniformLocation(p,k);
+  g.useProgram(p);for(const k of['uC','uU','uT','uI','uW','uF','uOil'])UN[k]=g.getUniformLocation(p,k);
   UN.roots=g.getUniformLocation(p,'uRoots[0]');gl=g;
  }
 }catch(e){gl=null}
@@ -225,10 +236,10 @@ function makeLitPit(image){
   for(let x=0;x<width;x++){
    const i=(y*width+x)*4,light=horizontal[x]*vertical;
    const luminance=.21*data[i]+.72*data[i+1]+.07*data[i+2];
-   const reflected=(5+1.27*luminance)*light;
-   data[i]=data[i]*(1+.85*light)+reflected*.94;
-   data[i+1]=data[i+1]*(1+.27*light)+reflected*.49;
-   data[i+2]=data[i+2]*(1-.10*light)+reflected*.21;
+   const reflected=(5+1.39*luminance)*light;
+   data[i]=data[i]*(1+.85*light)+reflected*.96;
+   data[i+1]=data[i+1]*(1+.30*light)+reflected*.55;
+   data[i+2]=data[i+2]*(1-.10*light)+reflected*.24;
   }
  }
  ctx.putImageData(pixels,0,0);
@@ -259,7 +270,13 @@ function paintPit(lit){
  }
  return plate;
 }
-function drawForegroundStones(light){
+function drawOilLight(c,flash=0){
+ if(flash<.01)return;
+ c.save();c.globalCompositeOperation='screen';c.globalAlpha=.59*flash;
+ c.drawImage(bWarm,cx+(oilX-1.42)*U,by-U*.51,U*2.84,U*.97);
+ c.restore();
+}
+function drawForegroundStones(light,oilFlash){
  if(!litPit)return;
  const {x,y,w,h}=pitFrame();
  x2.save();
@@ -271,6 +288,7 @@ function drawForegroundStones(light){
  x2.drawImage(bgD,0,0,W,H);
  x2.globalAlpha=light;
  x2.drawImage(bgL,0,0,W,H);
+ drawOilLight(x2,oilFlash);
  x2.restore();
 }
 function drawEmberBed(){
@@ -466,25 +484,47 @@ function logSpr(l){
  }
  s.restore();
  return[B,C,G,S]}
-function drawLogFlame(c,l,wind,x,y,angle,span,depth,behind){
+function makeLogFlame(l,wind,x,y,angle,span,depth){
  const heat=Math.min(1,(l.heat-.23)/.66)*Math.min(1,l.fuel*3);
- if(heat<=0)return;
- const phase=(l.seed%71)*.17+l.slot*2.37+(behind?4.4:0);
+ if(!l.front||!l.land||heat<=0)return null;
+ const phase=(l.seed%71)*.17+l.slot*2.37;
  const pulse=.5+.5*Math.sin(T*6.1+phase+.65*Math.sin(T*2.3+phase));
- const along=span*((behind?(l.slot===0?.19:-.21):(l.slot===0?-.24:l.slot===1?.20:-.06))+.06*Math.sin(T*2.1+phase));
- const across=depth*(behind?.42:.24);
+ const along=span*((l.slot===4?.15:-.18)+.045*Math.sin(T*2.1+phase));
+ const across=depth*.43;
  const rootX=x+along*Math.cos(angle)-across*Math.sin(angle);
  const rootY=y+along*Math.sin(angle)+across*Math.cos(angle);
- const width=U*(behind?.15:.14)*(.74+.26*pulse)*(.65+.35*heat);
- const height=U*(behind?.19+.23*pulse:.09+.20*pulse)*(.38+.62*heat)*(1+boost*.37);
- const lean=height*(wind*.43+.30*Math.sin(T*4.6+phase))-(behind?.12:.32)*along;
- if(!behind){
-  c.save();c.translate(rootX,rootY);c.rotate(angle);
-  c.globalCompositeOperation='screen';c.globalAlpha=heat*(.13+.15*pulse);
-  c.drawImage(bWarm,-width,-depth*.37,width*2,depth*.65);
-  c.restore();
+ const anchor=(rootX-cx)/U;
+ let plumeX=0,plumeY=0,total=0;
+ for(let i=0;i<fireRoots.length;i+=3){
+  const strength=fireRoots[i+2],offset=anchor*.60-fireRoots[i];
+  const weight=strength**2/(.022+offset*offset);
+  plumeX+=fireRoots[i]*weight;plumeY+=fireRoots[i+1]*weight;total+=weight;
  }
- drawSurfaceFlame(c,rootX,rootY,width,height,lean,heat*(behind?.82:.94)*(.25+.75*pulse),phase);
+ if(!total)return null;
+ // The same flame crosses the bark and reaches into an active part of the plume.
+ const joinX=cx+(plumeX/total+wind*.055)*U;
+ const joinY=by-(plumeY/total+.19)*U;
+ const height=Math.min(U*.74,Math.max(U*.29,(rootY-joinY)*1.60))*(.88+.16*pulse)*(1+boost*.16);
+ const width=U*.20*(.71+.29*heat)*(.88+.12*pulse);
+ const lean=(joinX-rootX)*1.28+height*.13*Math.sin(T*4.4+phase);
+ return {x:rootX,y:rootY,width,height,lean,side:l.slot===0?1:-1,opacity:heat*(.57+.35*pulse),phase};
+}
+
+const flameOnBark=mk(256,80),barkMask=flameOnBark.getContext('2d');
+function drawLogFlameOnBark(c,flame,bark,w,h,x,y,angle,scaleX,scaleY,alpha){
+ const sx=flameOnBark.width/w,sy=flameOnBark.height/h;
+ barkMask.save();
+ barkMask.clearRect(0,0,flameOnBark.width,flameOnBark.height);
+ // Project the world-space flame into the log's sprite before clipping to its bark.
+ barkMask.setTransform(sx,0,0,sy,flameOnBark.width/2,flameOnBark.height/2);
+ barkMask.scale(1/scaleX,1/scaleY);barkMask.rotate(-angle);barkMask.translate(-x,-y);
+ drawLogFlame(barkMask,flame);
+ barkMask.setTransform(sx,0,0,sy,flameOnBark.width/2,flameOnBark.height/2);
+ barkMask.globalCompositeOperation='destination-in';
+ barkMask.drawImage(bark,-w/2,-h/2,w,h);
+ barkMask.restore();
+ c.globalCompositeOperation='source-over';c.globalAlpha=alpha*.79;
+ c.drawImage(flameOnBark,-w/2,-h/2,w,h);
 }
 
 function drawLog(c,l,light,wind){
@@ -493,9 +533,10 @@ function drawLog(c,l,light,wind){
  const w=photo?l.len*U*1.028:s[0].width/D,h=photo?l.d*U*1.25:s[0].height/D;
  const length=.47+.53*Math.pow(fuel,.75),thickness=.42+.58*fuel;
  const x=cx+l.x*U,y=by-(l.y+l.oy)*U+(1-fuel)*U*.065,angle=l.a+l.oa*Math.min(1,l.oy/1.5);
- const wrap=l.front&&l.land;
- if(wrap)drawLogFlame(c,l,wind,x,y,angle,w*length,h*thickness,true);
- c.save();c.translate(x,y);c.rotate(angle);c.scale(l.flip*length,thickness);
+ const scaleX=l.flip*length;
+ const flame=makeLogFlame(l,wind,x,y,angle,w*length,h*thickness);
+ if(flame)drawLogFlame(c,flame);
+ c.save();c.translate(x,y);c.rotate(angle);c.scale(scaleX,thickness);
  if(photo&&l.oy<.16){
   c.globalAlpha=al*(1-l.oy/.16);
   c.drawImage(logContact,-w*.53,h*.09,w*1.06,h*.65);
@@ -507,8 +548,8 @@ function drawLog(c,l,light,wind){
  c.globalAlpha=al*light*lit*(.89+.11*Math.sin(T*6+l.seed));c.drawImage(s[3],-w/2,-h/2,w,h);
  c.globalCompositeOperation='lighter';
  c.globalAlpha=al*l.char*l.heat*l.heat*(.78+.16*Math.sin(T*3+l.seed));c.drawImage(s[2],-w/2,-h/2,w,h);
+ if(flame)drawLogFlameOnBark(c,flame,s[0],w,h,x,y,angle,scaleX,thickness,al);
  c.restore();
- if(wrap)drawLogFlame(c,l,wind,x,y,angle,w*length,h*thickness,false);
 }
 function addLog(o){
  const used=logs.map(l=>l.slot),i=SL.findIndex((s,j)=>!used.includes(j));if(i<0||logs.length>=MAXL)return false;
@@ -620,7 +661,7 @@ const surfaceFlameFrames=(()=>{
   const t=frame/count,phase=t*2*Math.PI;
   for(let row=0;row<h;row++){
    const y=1.04-(row+.5)*1.17/h,rise=Math.max(0,y);
-   const curl=rise*(.24*Math.sin(rise*5.5-phase)+.19*Math.sin(rise*9-2*phase));
+   const curl=.19*Math.sin(Math.PI*rise)+rise*(.24*Math.sin(rise*5.5-phase)+.19*Math.sin(rise*9-2*phase));
    const width=.58-.47*smooth(rise);
    for(let col=0;col<w;col++){
     const x=((col+.5)/w*1.56-.78-curl)/width;
@@ -631,7 +672,7 @@ const surfaceFlameFrames=(()=>{
     const density=edge*tip*smooth((y+.12)/.25)*(.24+.76*smooth((folds+.16*ripple-.20-.12*rise)/.47));
     const crease=(x+(folds-.5)*1.5)*1.8;
     const filament=Math.exp(-crease*crease);
-    const hot=clamp(.69*filament+.44*folds-.50*rise);
+    const hot=clamp((.48+.32*smooth((rise-.06)/.27))*filament+.44*folds-.43*rise);
     const p=(row*w+col)*4;
     img.data[p]=lerp(211,255,hot);
     img.data[p+1]=lerp(76,234,hot);
@@ -643,15 +684,15 @@ const surfaceFlameFrames=(()=>{
   return tile;
  });
 })();
-function drawSurfaceFlame(c,x,y,width,height,lean,opacity,phase){
+function drawLogFlame(c,{x,y,width,height,lean,side,opacity,phase}){
  if(opacity<=.01)return;
  const frame=Math.floor(T*(14+phase%4)+phase*7)%surfaceFlameFrames.length;
- c.save();c.translate(x,y);c.transform(width,0,-lean,height,0,0);
+ c.save();c.translate(x,y);c.transform(width*side,0,-lean,height,0,0);
  c.globalAlpha=opacity;
  c.drawImage(surfaceFlameFrames[frame],-.78,-1.04,1.56,1.17);
  c.restore();
 }
-function fallback(dt,wind,fi){
+function fallback(dt,wind,fi,oilFlash){
  fAcc=Math.min(5,fAcc+dt*(reduced?27:65)*fi);
  while(fAcc>1&&FP.length<210){
   fAcc--;
@@ -674,8 +715,18 @@ function fallback(dt,wind,fi){
   }
   const width=p.s*(1.9-k*1.3),height=p.s*(2.2+.4*Math.sin(k*Math.PI));
   x2.save();x2.translate(p.x,p.y);x2.rotate(k*(wind*.28+.22*Math.sin(T*4+p.ph)));x2.scale(p.side,1);
-  x2.globalCompositeOperation='screen';x2.globalAlpha=Math.sin(Math.PI*k)*(.59+.18*Math.sin(T*7+p.ph));
+  x2.globalCompositeOperation='screen';x2.globalAlpha=Math.sin(Math.PI*k)*(.65+.18*Math.sin(T*7+p.ph));
   x2.drawImage(flameBrush,-width*.47,-height,width,height);
+  x2.restore();
+ }
+ if(oilFlash>.01){
+  const width=U*(.22+.46*oilFlash),height=U*(.42+.98*oilFlash);
+  const sway=.15*Math.sin(T*12)+wind*.25;
+  x2.save();x2.translate(cx+oilX*U,by-oilY*U);x2.transform(1,0,-sway,1,0,0);
+  x2.globalCompositeOperation='screen';x2.globalAlpha=.90*oilFlash;
+  x2.drawImage(flameBrush,-width*.44,-height,width,height);
+  x2.scale(-1,1);x2.globalAlpha=.64*oilFlash;
+  x2.drawImage(flameBrush,-width*.29,-height*.71,width*.67,height*.75);
   x2.restore();
  }
  x2.globalAlpha=1;x2.globalCompositeOperation='source-over';
@@ -830,39 +881,46 @@ function render(dt){
   fuel+=l.fuel}
  updateFireRoots();
  I+=(Math.min(1.1,heat/3)-I)*dt*.6;
+ oilFlashAge+=dt;
  if(pourAge!==null){
   const previous=pourAge;
   pourAge+=dt;
   if(previous===0&&dt>0)oilTrickle();
   if(previous<.29&&pourAge>=.29){
    bGoal=Math.max(bGoal,reduced?.35:1.18);
+   oilFlashAge=pourAge-.29;oilX=pourX;oilY=pourY;
    oilFlare();
-   for(let i=0;i<(reduced?3:16);i++)fireSpark(.75+R()*.65);
+   say('炎が燃え上がりました');
+   for(let i=0;i<(reduced?4:26);i++)spark(cx+(oilX+(R()-.5)*.27)*U,by-(oilY+R()*.12)*U,.89+R()*.69);
   }
   if(pourAge>.62)pourAge=null;
  }
  bGoal*=Math.exp(-dt/1.8);boost+=(bGoal-boost)*Math.min(1,dt*2.5);
  feedT+=dt;if(S.auto&&feedT>7&&(logs.length<4||fuel<2.2))addLog();
  const fi=I+boost*.45,flick=.5+.25*Math.sin(T*9.1)+.15*Math.sin(T*14.7+1)+.1*Math.sin(T*23.3);
- const light=(1-Math.exp(-Math.max(0,fi)*2.35))*(reduced?.96+.04*flick:.88+.12*flick);
+ const oilFlash=(reduced?.48:1)*Math.min(1,oilFlashAge/.13)*Math.exp(-Math.max(0,oilFlashAge-.13)/.69);
+ const ambientLight=(1-Math.exp(-Math.max(0,fi)*2.53))*(reduced?.96+.04*flick:.88+.12*flick);
+ const light=ambientLight+(1-ambientLight)*.91*oilFlash;
  em+=(Math.min(1,I+boost*.3)-em)*dt*.3;
 
  x0.globalAlpha=1;x0.drawImage(bgD,0,0,W,H);x0.globalAlpha=light;x0.drawImage(bgL,0,0,W,H);x0.globalAlpha=1;
  drawEmberBed();
+ drawOilLight(x0,oilFlash);
  for(const l of logs)if(!l.front)drawLog(x0,l,light);
 
  if(gl){
   gl.uniform2f(UN.uC,cx*gs,(H-by)*gs);gl.uniform1f(UN.uU,U*gs);gl.uniform1f(UN.uT,T);
   gl.uniform1f(UN.uI,fi);gl.uniform1f(UN.uW,wind);gl.uniform1f(UN.uF,flick);
   gl.uniform3fv(UN.roots,fireRoots);
+  gl.uniform3f(UN.uOil,oilX,oilY,oilFlash);
   gl.drawArrays(gl.TRIANGLES,0,3);
  }
 
  x2.clearRect(0,0,W,H);
- if(!gl)fallback(dt,wind,fi);
+ if(!gl)fallback(dt,wind,fi,oilFlash);
  // The closest log hides both the bark and small flames behind it.
  for(let i=logs.length-1;i>=0;i--)if(logs[i].front)drawLog(x2,logs[i],light,wind);
- drawForegroundStones(light);
+ drawForegroundStones(light,oilFlash);
  spAcc=Math.min(8,spAcc+(12*I+45*boost)*(reduced?.4:1)*dt);
  while(spAcc>1){spAcc--;fireSpark(1+boost*.4)}
  x2.globalCompositeOperation='lighter';x2.lineCap='round';
