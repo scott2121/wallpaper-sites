@@ -32,6 +32,10 @@ button:hover,.pill span:hover{background:rgba(255,240,215,.2)}
 label{display:inline-flex;gap:6px;align-items:center;font-size:13px}
 input[type=range]{width:min(42vw,260px);accent-color:#ffc47a}
 output{font-variant-numeric:tabular-nums;min-width:3.2em}
+.wind-control{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.wind-control input{width:clamp(78px,18vw,125px)}
+.wind-control output{min-width:6.7em}
+.wind-control button:disabled{cursor:default;opacity:.6}
 #status{font-size:12px;opacity:.85;min-height:1.4em;flex:1 1 200px}
 #show{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:none;min-height:40px;background:rgba(14,17,26,.76)}
 #show:hover,#show:focus-visible,#hide:hover{background:#242a38}
@@ -70,6 +74,11 @@ body.hide #show{display:block}
     <label>速度 <select id="speed">
       <option value="0.25">0.25×</option><option value="1" selected>1×（約30分）</option><option value="4">4×</option><option value="20">20×</option><option value="60">60×</option>
     </select></label>
+    <div class="wind-control">
+      <label>風 <input id="wind" type="range" min="-100" max="100" step="1" value="0" aria-label="風向きと強さ"></label>
+      <output id="windv" for="wind" aria-hidden="true"></output>
+      <button id="wind-auto" type="button" aria-label="風をシードの設定に戻す">自動</button>
+    </div>
     <button id="fs" type="button" title="F">全画面</button>
     <button id="png" type="button" title="S">PNG保存</button>
     <button id="json" type="button">設定JSON</button>
@@ -81,6 +90,7 @@ body.hide #show{display:block}
 const FRAG=`#version 300 es
 precision highp float;
 uniform vec2 uR;uniform float uT,uS,uSeed,uWind;uniform int uScene;uniform vec4 uP;uniform vec3 uTint,uSky;
+uniform float uBreeze,uWindDrift;
 out vec4 o;
 float hz,K,SV,A;vec2 sun;vec3 sunC,HZ;
 float ss(float a,float b,float x){float t=clamp((x-a)/(b-a),0.,1.);return t*t*(3.-2.*t);}
@@ -122,7 +132,8 @@ vec3 meadow(vec2 p,vec3 c){
   for(int j=-2;j<=2;j++){float id=cx+float(j),r1=h1(id*1.3+fl*71.),r2=h1(id*2.7+fl*31.+.5);
    float bx=(id+.5+(r1-.5)*.9)/N,hh=H*(.45+.75*r2),yr=(p.y-by)/hh;
    if(yr>1.)continue;yr=max(yr,0.);
-   float sway=(sin(uT*1.4+bx*8.+r1*6.3)*.3+(n2(vec2(bx*2.-uT*.3*uWind,fl))-.35)*1.6)*uWind;
+   float gust=n2(vec2(bx*2.-uWindDrift*.3,fl));
+   float sway=(.47+sin(uT*1.4+bx*8.+r1*6.3)*.22+(gust-.5)*.55)*uBreeze;
    float x=bx+((r2-.5)*.25+sway*.2)*hh*yr*yr,w=(.003+.0016*fl)*(1.-yr)+.0005;
    vec3 bc=mix(vec3(.03,.05,.02),vec3(.17,.21,.06),yr*yr)*A*(1.-.2*fl);
    bc+=vec3(.9,.6,.2)*yr*SV*exp(-abs(bx-sun.x)*2.5)*.45;
@@ -167,7 +178,9 @@ vec3 coast(vec2 p,vec3 c){
   vec2 w=vec2(p.x*pz*3.,pz*2.);
   // Long swell, finer ripples and shallow chop move at different rates.
   float l=n2(w*vec2(.35,1.1)+vec2(t*.2,t*.55)+13.);
-  float a=n2(w*vec2(1.,3.)+vec2(t*.5,t*1.6)),b=n2(w*vec2(2.3,7.)+vec2(-t*.4,t*2.3)+7.);
+  vec2 rippleDrift=vec2(-uWindDrift*.13,0.);
+  float a=n2(w*vec2(1.,3.)+vec2(t*.5,t*1.6)+rippleDrift);
+  float b=n2(w*vec2(2.3,7.)+vec2(-t*.4,t*2.3)+rippleDrift*2.+7.);
   float ripple=ss(.012,.10,d),chop=ss(.065,.19,d);
   vec2 slope=vec2((l-.5)*.14+(a-.5)*.16,(a-.5)*.21+(l-.5)*.16)*ripple;
   slope+=vec2(-.075,.115)*(b-.5)*chop;
@@ -218,7 +231,7 @@ vec3 mountains(vec2 p,vec3 c){
   if(i<2)m=mix(m,vec3(.78,.74,.8)*mix(vec3(1.),sunC,.6)*A,sn*.7);
   m+=sunC*vec3(1.,.7,.5)*ss(.1,1.2,-sl)*.14*SV*(1.-k*.5);
   m=mix(m,HZ,pow(1.-k,1.5)*(.62+.25*uP.y));
-  float mi=(1.-exp(-dp*mix(7.,3.,k)))*(.5-.3*k)*(.6+.8*fbm(vec2(p.x*2.5+uT*.012*uWind+fi*5.,p.y*9.)));
+  float mi=(1.-exp(-dp*mix(7.,3.,k)))*(.5-.3*k)*(.6+.8*fbm(vec2(p.x*2.5-uWindDrift*.012+fi*5.,p.y*9.)));
   m=mix(m,HZ*mix(1.,.8,k),clamp(mi,0.,.9));
   c=mix(c,m,ss(-.0012,.0012,dp));}
  return c;}
@@ -240,11 +253,11 @@ void main(){
   c=mix(c,solarDisc,disk);
   c+=sunC*(exp(-d*24.)*.28+exp(-d*7.)*.1)*G;
   float pz=1./(h+.25);
-  vec2 q=vec2(p.x*pz,pz*2.4)*uP.w+vec2(uT*.01*uWind,uT*.002);
+  vec2 q=vec2(p.x*pz,pz*2.4)*uP.w-vec2(uWindDrift*.018,0.);
   vec3 lit=mix(vec3(1.,.93,.8),vec3(1.,.55,.34),K)*mix(vec3(1.),uTint,.6)*mix(1.,.6,ss(.85,1.,uS));
   vec3 shd=mix(vec3(.5,.54,.64),vec3(.2,.18,.28),K)*uSky;
   lit*=mix(vec3(1.),uTint,.56);
-  float ci=fbm(vec2(q.x*.5+uT*.004,q.y*3.)+41.);
+  float ci=fbm(vec2(q.x*.5,q.y*3.)+41.);
   c=mix(c,mix(c,lit,.7),ss(.5,.85,ci)*mix(.38,.11,ss(.30,.70,uP.z))*hf);
   vec2 ld=normalize(sun-p+1e-4)*.2;
   float n=fbm(q),nl=fbm(q+vec2(ld.x,-ld.y));
@@ -284,11 +297,15 @@ function palette(seed){
 
 const q=new URLSearchParams(location.search),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const querySeed = q.get('seed');
+const queryWind = q.get('wind');
 const randomSeed=()=>Math.floor(Math.random()*2147483648);
 const initialSeed = /^\d+$/.test(querySeed ?? '') && Number(querySeed) <= 2147483647 ? Number(querySeed) : randomSeed();
+const initialWind = /^-?\d{1,3}$/.test(queryWind ?? '') && Math.abs(Number(queryWind)) <= 100 ? Number(queryWind) : null;
 const st={seed:initialSeed,scene:SC.includes(q.get('scene'))?q.get('scene'):'meadow',
-  phase:.28,speed:1,paused:reduced,keep:true};
+  phase:.28,speed:1,paused:reduced,keep:true,wind:initialWind};
 let pal=palette(st.seed),cv=$('c'),gl=null,x2=null,U={},mt=0,raf=0,last=0;
+const windTarget=()=>st.wind??pal.wind*50;
+let breeze=windTarget()/50,windDrift=0;
 const prog=()=>st.phase;
 const say=t=>{$('status').textContent=t};
 
@@ -304,7 +321,7 @@ function initGL(){
     gl.linkProgram(pr);
     if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(pr));
     gl.useProgram(pr);
-    for(const n of['uR','uT','uS','uSeed','uWind','uScene','uP','uTint','uSky'])U[n]=gl.getUniformLocation(pr,n);
+    for(const n of['uR','uT','uS','uSeed','uWind','uBreeze','uWindDrift','uScene','uP','uTint','uSky'])U[n]=gl.getUniformLocation(pr,n);
     return true;
   }catch(e){console.warn(e);gl=null;return false}
 }
@@ -326,6 +343,7 @@ function draw(){
     gl.viewport(0,0,cv.width,cv.height);
     gl.uniform2f(U.uR,cv.width,cv.height);gl.uniform1f(U.uT,mt);gl.uniform1f(U.uS,prog());
     gl.uniform1f(U.uSeed,pal.fseed);gl.uniform1f(U.uWind,pal.wind);gl.uniform1i(U.uScene,SC.indexOf(st.scene));
+    gl.uniform1f(U.uBreeze,breeze);gl.uniform1f(U.uWindDrift,windDrift);
     gl.uniform4f(U.uP,pal.sunX,pal.haze,pal.cov,pal.cs);gl.uniform3fv(U.uTint,pal.tint);
     gl.uniform3fv(U.uSky,pal.sky);
     gl.drawArrays(gl.TRIANGLES,0,3);
@@ -348,7 +366,7 @@ function draw2d(){
   x.fillStyle=rgb(mix(sunc,[1,1,1],.35));x.beginPath();x.arc(sx,sy,R,0,7);x.fill();
   const cloudRandom=rng(st.seed^0xbb67ae85),cloudCount=Math.round(3+39*(.75-P.cov));
   for(let i=0;i<cloudCount;i++){
-    const cx=(((cloudRandom()+mt*.0015*P.wind)%1)+1)%1*w*1.5-w*.25,cy=cloudRandom()*hz*.85,rw=(.12+cloudRandom()*.22)*w,lit=mix(mix([.5,.54,.64],[.2,.18,.28],K),hor,.35+.5*cy/hz);
+    const cx=(((cloudRandom()+windDrift*.0025)%1)+1)%1*w*1.5-w*.25,cy=cloudRandom()*hz*.85,rw=(.12+cloudRandom()*.22)*w,lit=mix(mix([.5,.54,.64],[.2,.18,.28],K),hor,.35+.5*cy/hz);
     x.save();x.translate(cx,cy);x.scale(1,.16);g=x.createRadialGradient(0,0,0,0,0,rw);g.addColorStop(0,rgb(lit,.26+.5*(.75-P.cov)));g.addColorStop(1,rgb(lit,0));
     x.fillStyle=g;x.beginPath();x.arc(0,0,rw,0,7);x.fill();x.restore();}
   const layer=(y0,amp,f,col,sharp)=>{const ph=[r()*9,r()*9,r()*9,r()*9];x.fillStyle=rgb(col);x.beginPath();x.moveTo(0,h);
@@ -358,7 +376,7 @@ function draw2d(){
   if(st.scene==='meadow'){
     for(let i=0;i<5;i++){const k=i/4;layer(hz-h*.03+k*k*h*.2,h*(.02+.04*k),5-k*2.5,mix(mix([.3,.36,.17],[.09,.13,.045],k).map(v=>v*amb),hzc,(1-k)*(1-k)*.7))}
     x.lineCap='round';
-    for(let i=0;i<220;i++){const bx=r()*w,bh=h*(.05+r()*.14),sw=(Math.sin(mt*1.4+bx*.01+r()*6)*.25+.3)*P.wind*bh*.3;
+    for(let i=0;i<220;i++){const bx=r()*w,bh=h*(.05+r()*.14),sw=(Math.sin(mt*1.4+bx*.01+r()*6)*.22+.47)*breeze*bh*.3;
       x.strokeStyle=rgb([.05+.1*r(),.08+.1*r(),.03].map(v=>v*amb));x.lineWidth=h*.004;x.beginPath();x.moveTo(bx,h);x.quadraticCurveTo(bx,h-bh*.6,bx+sw,h-bh);x.stroke()}
   }else if(st.scene==='city'){
     for(let l=0;l<3;l++){const k=l/2,base=hz+h*(.02+k*.2);let bx=-r()*h*.1;
@@ -373,7 +391,7 @@ function draw2d(){
     g=x.createLinearGradient(0,hz,0,h);g.addColorStop(0,rgb(mix(hor,[.1,.2,.3],.25)));g.addColorStop(1,rgb(mix([.06,.15,.22],[.02,.04,.08],K).map(v=>v*amb)));
     x.fillStyle=g;x.fillRect(0,hz,w,h-hz);
     const vis=Math.max(0,Math.min(1,(hz-sy)/(h*.04)+1));
-    for(let i=0;i<260;i++){const d=r()*r(),y=hz+d*(h-hz),gw=h*(.02+d*.25),dx=(r()+r()+r()-1.5)*gw*1.4,a=(.5+.5*Math.sin(mt*(1.5+r()*2)+i))*vis;
+    for(let i=0;i<260;i++){const d=r()*r(),y=hz+d*(h-hz),gw=h*(.02+d*.25),dx=(r()+r()+r()-1.5)*gw*1.4,a=(.5+.5*Math.sin(mt*(1.5+r()*2)-windDrift*.15+i))*vis;
       x.fillStyle=rgb(sunc,a*.75);x.fillRect(sx+dx,y,h*(.004+d*.03),Math.max(1,h*(.0015+d*.004)))}
     layer(h*1.02,h*.1,1.2,mix([.36,.3,.23],hor,.2).map(v=>v*amb));
   }else for(let i=0;i<6;i++){const k=i/5;layer(hz+h*(k*.3-.03)-h*.12*(1-k*.5),h*(.14-.07*k),3+k*2,mix(mix([.3,.34,.46],[.045,.06,.07],k).map(v=>v*amb),hzc,Math.pow(1-k,1.5)*.75),true)}
@@ -383,7 +401,14 @@ function frame(now){
   raf=0;
   if(!st.paused && now-last<32){kick();return}
   const dt=Math.min(Math.max((now-last)/1000,0),.1);last=now;
-  if(!st.paused){st.phase=(st.phase+dt*st.speed/CYCLE)%1;mt+=dt*Math.min(Math.max(st.speed,.5),2)}
+  if(!st.paused){
+    st.phase=(st.phase+dt*st.speed/CYCLE)%1;
+    const motionStep=dt*Math.min(Math.max(st.speed,.5),2);
+    const previousBreeze=breeze;
+    breeze+=(windTarget()/50-breeze)*(1-Math.exp(-dt*4));
+    windDrift+=(previousBreeze+breeze)*.5*motionStep;
+    mt+=motionStep;
+  }
   draw();
   const s=prog();
   cv.style.opacity=st.paused||reduced?1:Math.min(1,Math.min(s,1-s)*100);
@@ -392,11 +417,27 @@ function frame(now){
 }
 function kick(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame)}
 
+function settingsQuery(){
+  return `?seed=${st.seed}&scene=${st.scene}${st.wind===null?'':`&wind=${st.wind}`}`;
+}
+function syncURL(){
+  try{history.replaceState(null,'',settingsQuery())}catch(e){}
+}
+function syncWind(){
+  const value=windTarget();
+  const label=value===0?'無風':`${value<0?'左向き':'右向き'} ${Math.abs(value)}%`;
+  $('wind').value=String(value);
+  $('wind').setAttribute('aria-valuetext',st.wind===null?`自動、${label}`:label);
+  $('windv').textContent=st.wind===null?`自動・${label}`:label;
+  $('wind-auto').disabled=st.wind===null;
+  if(st.paused)breeze=value/50;
+}
 function sync(){
   for(const r of document.querySelectorAll('input[name=scene]'))r.checked=r.value===st.scene;
   $('seed').value=st.seed;$('keep').checked=st.keep;$('speed').value=String(st.speed);
   $('pause').textContent=st.paused?'再生':'一時停止';$('pause').setAttribute('aria-pressed',String(st.paused));
-  try{history.replaceState(null,'',`?seed=${st.seed}&scene=${st.scene}`)}catch(e){}
+  syncWind();
+  syncURL();
   kick();
 }
 function setSeed(v){st.seed=Math.min(2147483647,Math.max(0,Math.floor(Number(v))||0));pal=palette(st.seed);sync()}
@@ -434,11 +475,11 @@ function savePNG(){
 }
 function saveJSON(){
   const data={name:'夕日 / Living Sunset',seed:st.seed,scene:st.scene,sceneLabel:JP[st.scene],sunProgress:+prog().toFixed(4),speed:st.speed,paused:st.paused,
-    keepScene:st.keep,cycleSeconds:CYCLE,renderer:gl?'webgl2':'canvas2d',palette:pal,url:`${CANON}?seed=${st.seed}&scene=${st.scene}`};
+    keepScene:st.keep,wind:windTarget(),windAutomatic:st.wind===null,cycleSeconds:CYCLE,renderer:gl?'webgl2':'canvas2d',palette:pal,url:CANON+settingsQuery()};
   download(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),`living-sunset-${st.scene}-${st.seed}.json`);say('設定JSONを保存しました。');
 }
 function copyURL(){
-  const url=location.protocol.startsWith('http')?location.href:`${CANON}?seed=${st.seed}&scene=${st.scene}`;
+  const url=location.protocol.startsWith('http')?new URL(settingsQuery(),location.href).href:CANON+settingsQuery();
   const fb=()=>say('共有URL: '+url);
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(()=>say('共有URLをコピーしました。'),fb);else fb();
 }
@@ -449,6 +490,9 @@ $('regen').onclick=regen;
 $('keep').onchange=e=>{st.keep=e.target.checked;say(st.keep?'再生成しても景色を保ちます。':'再生成で景色も切り替えます。')};
 $('copy').onclick=copyURL;
 $('sun').addEventListener('input',e=>{st.phase=Number(e.target.value)/1000;kick()});
+$('wind').addEventListener('input',e=>{st.wind=Number(e.target.value);syncWind();kick()});
+$('wind').addEventListener('change',syncURL);
+$('wind-auto').onclick=()=>{st.wind=null;syncWind();syncURL();$('wind').focus();kick()};
 $('pause').onclick=togglePause;
 $('speed').onchange=e=>{st.speed=parseFloat(e.target.value)||1;kick()};
 $('fs').onclick=fullscreen;
