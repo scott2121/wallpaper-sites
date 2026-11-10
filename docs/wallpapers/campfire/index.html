@@ -459,17 +459,20 @@ function fallback(dt,wind,fi){
  x2.globalAlpha=1;x2.globalCompositeOperation='source-over'}
 
 /* ---------- opt-in synthesized sound ---------- */
-let AC=null,master,nb,snd=false;
+let AC=null,master,nb,bedGain,bedFilter,snd=false;
+let nextBedUpdate=0,nextCrackle=0;
+let bedLevel=0,bedCutoff=110;
 function initAudio(){try{
  AC=new(window.AudioContext||window.webkitAudioContext)();
  nb=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=R()*2-1;
  master=AC.createGain();master.gain.value=0;master.connect(AC.destination);
- const s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();s.buffer=nb;s.loop=true;f.type='lowpass';f.frequency.value=240;g.gain.value=.9;
- s.connect(f);f.connect(g);g.connect(master);s.start();return true}catch(e){AC=null;return false}}
-function pop(){const t=AC.currentTime,s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
- s.buffer=nb;s.playbackRate.value=.5+R()*1.5;f.type='bandpass';f.frequency.value=700+R()*R()*5000;f.Q.value=1.5;
- const v=.05+Math.pow(R(),3)*.6,d=.008+R()*.05;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);
- s.connect(f);f.connect(g);g.connect(master);s.start(t,R()*1.8,d+.02)}
+ const source=AC.createBufferSource();source.buffer=nb;source.loop=true;
+ bedLevel=0;bedCutoff=110;
+ bedFilter=AC.createBiquadFilter();bedFilter.type='lowpass';bedFilter.frequency.value=bedCutoff;
+ bedGain=AC.createGain();bedGain.gain.value=bedLevel;
+ source.connect(bedFilter);bedFilter.connect(bedGain);bedGain.connect(master);source.start();
+ nextBedUpdate=nextCrackle=0;
+ return true}catch(e){AC=null;return false}}
 
 function canPlaySound(){
  return snd&&AC?.state==='running'&&!paused&&!document.hidden;
@@ -504,6 +507,44 @@ function noiseSweep(when,{from,to,peak=to,level,attack,duration,q=.8}){
  source.connect(filter);filter.connect(gain);gain.connect(master);
  source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect()};
  source.start(when,R()*(nb.duration-duration),duration);
+}
+
+function fireCrackle(when,flame,embers,flick,weight=1){
+ const frequency=(640+flame*2600)*(.58+.84*R());
+ const level=(.088*embers+.44*flame**1.2)*(.38+.62*R()**2)*(.72+.28*flick)*weight;
+ noiseSweep(when,{
+  from:frequency,peak:frequency*1.12,to:frequency*(.46+.16*flame),level,
+  attack:.002+R()*.002,duration:.022+.022*(1-flame)+R()*.023,q:1.5
+ });
+}
+
+function updateFireAudio(dt,intensity,flick,emberHeat){
+ if(!dt||!canPlaySound())return;
+ const flame=Math.max(0,Math.min(1,(intensity-.025)/1.2));
+ const embers=Math.max(0,Math.min(1,(emberHeat-.025)/.43));
+ const now=AC.currentTime;
+ if(now>=nextBedUpdate){
+  const level=(.07*embers+.86*flame**1.35)*(.74+.26*flick);
+  const cutoff=110+flame*(310+70*flick);
+  if(Math.abs(level-bedLevel)>.012||(level===0&&bedLevel>0)){
+   bedGain.gain.setTargetAtTime(level,now,.15);
+   bedLevel=level;
+  }
+  if(Math.abs(cutoff-bedCutoff)>8){
+   bedFilter.frequency.setTargetAtTime(cutoff,now,.17);
+   bedCutoff=cutoff;
+  }
+  nextBedUpdate=now+.125;
+ }
+ const rate=.78*embers+12*flame**1.5*(.46+.9*flick);
+ if(now<nextCrackle||R()>=-Math.expm1(-rate*dt))return;
+ fireCrackle(now,flame,embers,flick);
+ // Hotter surges occasionally give a quieter second snap.
+ if(flame>.43&&R()<flame*flick*.58){
+  const delay=.022+R()*.044;
+  fireCrackle(now+delay,flame,embers,flick,.53);
+  nextCrackle=now+delay+.036;
+ }else nextCrackle=now+.04;
 }
 
 function woodTone(when,frequency,level,duration){
@@ -613,7 +654,7 @@ function render(dt){
  x2.globalCompositeOperation='source-over';
  drawPour();
 
- if(dt&&canPlaySound()&&R()<dt*(1.5+9*Math.min(1.3,fi)))pop();
+ updateFireAudio(dt,fi,flick,em);
  statT-=dt;if(statT<=0){statT=.5;$('stat').textContent=`薪 ${logs.length}/${MAXL}本 ・ 残りの燃料 ${fuel.toFixed(1)}本分`}
 }
 function tick(now){
