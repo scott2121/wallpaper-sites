@@ -9,4 +9,5 @@ layout: null
   {% assign id = wallpaper.id | uri_escape %}
   <url><loc>{{ '/wallpapers/' | append: id | append: '/' | absolute_url | xml_escape }}</loc></url>
   {% endfor %}
+  <url><loc>{{ '/wallpapers/campfire/close-up/' | absolute_url | xml_escape }}</loc></url>
 </urlset>
