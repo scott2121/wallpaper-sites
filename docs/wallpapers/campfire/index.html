@@ -7,6 +7,7 @@
 <meta name="description" content="夜の森で静かに燃える焚き火のライブ壁紙。ゆらめく炎、赤く光る熾火、煙と火の粉をすべてプロシージャルに描画。薪をくべる・炎をあおる・風向きの調整・パチパチ音に対応しています。">
 <link rel="canonical" href="https://scott2121.github.io/wallpaper-sites/wallpapers/campfire/">
 <link rel="preload" href="./forest-pit.webp" as="image">
+<link rel="preload" href="./log-materials.webp" as="image">
 <meta name="theme-color" content="#020308">
 <style>
 html,body{margin:0;height:100%;background:#020308;color:#f3e6d6;font:14px/1.5 system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;overflow:hidden}
@@ -73,7 +74,7 @@ const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const rng=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
 const mk=(w,h)=>{const c=document.createElement('canvas');c.width=Math.max(1,w|0);c.height=Math.max(1,h|0);return c};
 const blob=(a,b)=>{const c=mk(64,64),x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,a);g.addColorStop(.4,b);g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return c};
-const bHot=blob('rgba(255,235,170,.9)','rgba(255,150,40,.45)'),bWarm=blob('rgba(255,120,30,.7)','rgba(200,40,5,.3)'),bSmoke=blob('rgba(90,88,92,.5)','rgba(60,60,66,.25)');
+const bWarm=blob('rgba(255,120,30,.7)','rgba(200,40,5,.3)'),bSmoke=blob('rgba(90,88,92,.5)','rgba(60,60,66,.25)');
 
 let W,H,D,U,cx,by,gs,bgD,bgL,T=0,I=.8,em=.8,boost=0,bGoal=0,feedT=0,raf=0,last=0,paused=reduced,statT=0,spAcc=0,fAcc=0,pourAge=null;
 const logs=[],SP=[],FP=[],EM=[];
@@ -83,7 +84,24 @@ const fireLaneWidth=.30;
 let pourX=0,pourY=.15;
 /* slots: x, y(up), angle, length, front — units of U around the fire base */
 const SL=[[-.06,.065,.06,1.05,1],[.17,.135,-.25,.8,1],[-.26,.25,-.85,.8,0],[.27,.25,.85,.8,0],[.05,.2,.28,.85,1],[-.1,.31,-.5,.7,0],[.12,.34,.55,.7,0]];
-{const r=rng(5);for(let i=0;i<90;i++){const a=r()*6.283,d=Math.sqrt(r());EM.push({x:Math.cos(a)*d*.6,y:Math.sin(a)*d*.13,s:.018+r()*.03,ph:r()*9,sp:.4+r()*1.6,v:[0,0,0,0,0,0].map(()=>.6+r()*.5)})}EM.sort((a,b)=>a.y-b.y)}
+{
+ const r=rng(5);
+ for(let i=0;i<64;i++){
+  const angle=r()*2*Math.PI,distance=Math.sqrt(r()),shape=new Path2D(),crack=new Path2D();
+  for(let j=0;j<7;j++){
+   const a=j*2*Math.PI/7,radius=.53+r()*.57,x=Math.cos(a)*radius,y=Math.sin(a)*radius;
+   if(j===0)shape.moveTo(x,y);else shape.lineTo(x,y);
+  }
+  shape.closePath();
+  crack.moveTo(-.64,(r()-.5)*.4);
+  crack.lineTo(-.24,(r()-.5)*.8);
+  crack.lineTo(.17,(r()-.5)*.9);
+  crack.lineTo(.55,(r()-.5)*.5);
+  EM.push({x:Math.cos(angle)*distance*.59,y:Math.sin(angle)*distance*.13,
+   size:.007+r()**2*.027,phase:r()*9,pulse:.45+r()*1.9,shape,crack});
+ }
+ EM.sort((a,b)=>a.y-b.y);
+}
 
 /* ---------- WebGL2 flames + smoke ---------- */
 const VS=`#version 300 es
@@ -96,38 +114,43 @@ out vec4 o;
 float h(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
 float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<4;i++){s+=a*n(p);p=p*2.03+vec2(17.1,9.3);a*=.5;}return s;}
-float fl(vec2 p,float sd,float hh,float wd,float sp){
- float y=p.y/hh,t=uT*sp;
- if(y<-.12||y>1.24)return 0.;
- float lift=max(y,0.);
- p.x-=(uW*.26*lift*lift+.12*sin(y*6.1-t*1.8+sd)*lift)*hh;
- if(abs(p.x)>wd+.27)return 0.;
- vec2 w=vec2(fbm(vec2(p.x*2.+sd,p.y*1.5-t*1.2)),n(vec2(p.x*3.-sd,p.y*2.-t*1.5+7.)))-.47;
- vec2 q=p+w*(.12+.64*max(y,0.))*vec2(1.,.6);
- float a=fbm(vec2(q.x*3.6+sd*2.,q.y*1.9-t*2.4));
- float b=n(vec2(q.x*12.-sd+a*1.9,q.y*6.-t*5.2));
- float wid=wd*(1.-.75*smoothstep(0.,1.12,y));
- float d=(1.-abs(q.x)/wid)*.76+(a-.47)*1.66+(b-.47)*.37-y*1.15+.29;
- return d*smoothstep(-.06,.05,p.y)*(1.-smoothstep(.86,1.22,y));
+vec2 flameField(vec2 p,float seed,float height,float width){
+ float y=p.y/height;
+ if(y<-.12||y>1.27||abs(p.x)>width+.44)return vec2(0.);
+ float rise=max(y,0.),t=uT*(.92+.022*seed);
+ float curl=fbm(vec2(seed+p.x*1.7,rise*3.4-t*1.9));
+ // Motion grows above the log, keeping the base attached in a gust.
+ float bend=height*rise*(uW*.24*rise+.11*sin(5.1*rise-t*2.+seed)+.49*(curl-.46));
+ float taper=1.-.82*smoothstep(.05,1.24,rise);
+ float x=(p.x-bend)/(width*taper*(.85+.36*curl));
+ float folds=fbm(vec2(x*1.8+seed,rise*3.8-t*2.6));
+ float ripples=n(vec2(x*4.2-folds*1.6+seed,rise*8.5-t*6.4));
+ float boundary=abs(x)+(folds-.47)*.69+(ripples-.5)*.17;
+ float softness=mix(.28,.075,smoothstep(.40,.67,folds+.15*ripples));
+ float edge=1.-smoothstep(.91-softness,.91+softness*.63,boundary);
+ // Gaps in the rising sheet open more often where the tip is thinner.
+ float pocket=smoothstep(.23+.14*rise,.61+.10*rise,folds+.15*(ripples-.45));
+ float tip=1.-smoothstep(.73+.12*curl,1.02+.15*folds,y);
+ float gate=smoothstep(-.075,.064,y)*tip;
+ float density=edge*gate*mix(.045,.99,pocket);
+ float crease=x*2.75+.84*sin(5.8*rise-t*2.8+seed)+2.8*(folds-.48);
+ float inner=exp(-crease*crease);
+ float temperature=clamp(.59*inner+.63*folds+.14*ripples-.55*rise,0.,1.);
+ return vec2(density,temperature);
 }
-vec3 ramp(float d){
- d=max(d,0.);
- // deep red-amber body -> amber -> pale incandescent core
- vec3 c=mix(vec3(.55,.05,0.),vec3(.95,.3,.02),smoothstep(0.,.3,d));
- c=mix(c,vec3(1.,.58,.12),smoothstep(.22,.7,d));
- c=mix(c,vec3(1.,.9,.72),smoothstep(.6,1.25,d));
- // desaturate the hottest region toward warm white
- c=mix(c,vec3(1.,.96,.88)*dot(c,vec3(.3,.59,.11)),.4*smoothstep(.7,1.3,d));
- return c*smoothstep(0.,.18,d);
-}
-vec3 flameAt(vec2 p,vec3 root,float salt,float scale,float turbulence){
+vec4 flameAt(vec2 p,vec3 root,float seed,float scale,float turbulence){
  float heat=root.z;
- if(heat<.01)return vec3(0.);
+ if(heat<.01)return vec4(0.);
  float flare=smoothstep(.75,1.47,uI);
- float height=(.22+.57*heat+.23*flare)*scale;
- float width=.13+.14*heat;
- float density=fl(p-root.xy,salt,height,width,.92+.022*salt);
- return ramp(density*turbulence)*(.35+.65*heat);
+ float surge=n(vec2(uT*1.38,seed*3.7));
+ float height=(.22+.57*heat+.23*flare)*scale*mix(.79,1.14,surge);
+ float width=.12+.17*heat;
+ vec2 field=flameField(p-root.xy,seed,height,width);
+ float temperature=field.y*(.83+.17*heat);
+ vec3 amber=mix(vec3(.81,.23,.046),vec3(1.,.66,.24),smoothstep(.11,.62,temperature));
+ vec3 color=mix(amber,vec3(1.,.94,.76),smoothstep(.55,.90,temperature));
+ float alpha=(1.-exp(-2.3*field.x*(.38+.62*heat)*turbulence))*.91;
+ return vec4(color*alpha,alpha);
 }
 void main(){
  vec2 p=(gl_FragCoord.xy-uC)/uU;
@@ -140,16 +163,15 @@ void main(){
  s.x-=uW*(.21*s.y+.18*s.y*s.y);
  float w=fbm(vec2(s.x*2.2+3.,s.y*2.-uT*.55));
 
- // Neighboring lanes overlap, but the hottest pieces supply the tallest tongues.
- vec3 c=flameAt(p,uRoots[0],1.3,.87,.75+.54*w)*.79
-       +flameAt(p,uRoots[1],5.7,1.04,1.18-.45*w)
-       +flameAt(p,uRoots[2],9.1,.78,.79+.37*w)*.86;
-
- // Compress the flame brightness without washing out warm colors.
- float m=max(c.r,max(c.g,c.b));
+ // Premultiplied sheets overlap, leaving the shaded bark visible in gaps.
+ vec4 farFlame=flameAt(p,uRoots[0],1.3,.89,.76+.54*w);
+ vec4 middleFlame=flameAt(p,uRoots[1],5.7,1.04,1.17-.39*w);
+ vec4 nearFlame=flameAt(p,uRoots[2],9.1,.83,.72+.48*w);
+ vec4 layers=middleFlame+farFlame*(1.-middleFlame.a);
+ layers=nearFlame+layers*(1.-nearFlame.a);
  float burn=smoothstep(.025,.62,heat);
- float a=(1.-exp(-m*2.25))*.97*burn;
- vec3 flame=c*(a/max(m,1e-4));
+ float a=layers.a*burn;
+ vec3 flame=layers.rgb*burn;
 
  // smoke: wider threshold and gentler warp for softer breakup
  float sw=.21+.28*max(s.y,0.);
@@ -251,6 +273,29 @@ function drawForegroundStones(light){
  x2.drawImage(bgL,0,0,W,H);
  x2.restore();
 }
+function drawEmberBed(){
+ if(em<.01)return;
+ for(const ember of EM){
+  const pulse=.5+.5*Math.sin(T*ember.pulse+ember.phase);
+  const heat=em*(.22+.78*pulse**3);
+  const size=ember.size*U;
+  x0.save();
+  x0.translate(cx+ember.x*U,by+ember.y*U);
+  x0.scale(size,size*.53);
+  x0.fillStyle=`rgb(${27+72*heat|0},${21+24*heat|0},${18+8*heat|0})`;
+  x0.fill(ember.shape);
+  x0.strokeStyle=`rgba(${155+100*heat|0},${26+112*heat|0},${10+32*heat|0},${.9*heat})`;
+  x0.lineWidth=.22;
+  x0.lineCap='round';
+  x0.stroke(ember.crack);
+  x0.restore();
+ }
+ x0.globalCompositeOperation='lighter';
+ x0.globalAlpha=.22*em;
+ x0.drawImage(bWarm,cx-U*.65,by-U*.18,U*1.3,U*.36);
+ x0.globalAlpha=1;
+ x0.globalCompositeOperation='source-over';
+}
 pitPhoto.onload=()=>{
  try{litPit=makeLitPit(pitPhoto)}catch{ return }
  bgD=paint(0);bgL=paint(1);
@@ -323,6 +368,72 @@ function paint(lit){
  return cv}
 
 /* ---------- logs: bark / charred / glow sprites ---------- */
+const logAtlas = new Image();
+const logContact = blob('rgba(10,5,3,.75)','rgba(10,5,3,.44)');
+let logPhotos = null;
+logAtlas.onload = () => {
+ try{logPhotos=makeLogPhotos(logAtlas)}catch{return}
+ for(const log of logs)log.spr=null;
+ if(paused&&!document.hidden)render(0);
+};
+logAtlas.src = './log-materials.webp';
+
+function makeLogPhotos(atlas){
+ // Each row holds the same silhouette in raw and charred states.
+ return [[20,177,718,200],[17,679,728,194]].map(([x,y,w,h])=>{
+  const [bark,charcoal]=[0,769].map(offset=>{
+   const tile=mk(w,h),c=tile.getContext('2d');
+   c.drawImage(atlas,x+offset,y,w,h,0,0,w,h);
+   c.globalCompositeOperation='source-atop';
+   const shade=c.createLinearGradient(0,0,0,h);
+   shade.addColorStop(0,'rgba(10,9,12,.06)');
+   shade.addColorStop(1,'rgba(8,7,10,.38)');
+   c.fillStyle=shade;c.fillRect(0,0,w,h);
+   return tile;
+  });
+
+  const ember=mk(w,h),e=ember.getContext('2d');
+  const reflection=mk(w,h),r=reflection.getContext('2d');
+  const carbon=charcoal.getContext('2d').getImageData(0,0,w,h).data;
+  const hot=e.createImageData(w,h),step=4,vertical=w*step*4,horizontal=step*4;
+  const warm=r.createImageData(w,h);
+  for(let row=0;row<h;row++){
+   for(let col=0;col<w;col++){
+    const p=(row*w+col)*4;
+    // The existing ridges catch firelight while the fissures stay dark.
+    const facing=Math.max(0,1-((col/w-.52)/.59)**2-((row/h-.19)/.69)**2);
+    const grain=Math.min(1,carbon[p+1]/103);
+    warm.data[p]=255;
+    warm.data[p+1]=111+58*grain;
+    warm.data[p+2]=38+33*grain;
+    warm.data[p+3]=carbon[p+3]*facing*(.045+.79*grain);
+   }
+  }
+  r.putImageData(warm,0,0);
+
+  for(let row=step;row<h-step;row++){
+   for(let col=step;col<w*.91;col++){
+    const p=(row*w+col)*4,gray=carbon[p+1];
+    if(carbon[p+3]<240||gray>48)continue;
+    // Emit between brighter bark ridges, well inside the outer edge.
+    const rim=Math.max(
+     Math.min(carbon[p-vertical+1],carbon[p+vertical+1]),
+     Math.min(carbon[p-horizontal+1],carbon[p+horizontal+1])
+    );
+    const seam=Math.min(1,(rim-gray-10)/31);
+    if(seam<=0)continue;
+    const pocket=Math.max(0,1-((col/w-.47)/.45)**2-((row/h-.59)/.33)**2);
+    hot.data[p]=255;
+    hot.data[p+1]=68+99*seam;
+    hot.data[p+2]=16+30*seam;
+    hot.data[p+3]=230*pocket*seam*(1-gray/56);
+   }
+  }
+  e.putImageData(hot,0,0);
+  return [bark,charcoal,ember,reflection];
+ });
+}
+
 function logSpr(l){
  const L=l.len*U,Rr=l.d*U/2,p=Rr*.9,w=L+2*p,h=2*Rr+2*p,q=rng(l.seed),e=Rr*.42;let g;
  const path=c=>{c.beginPath();c.ellipse(-L/2+e,0,e,Rr,0,Math.PI/2,Math.PI*1.5);c.ellipse(L/2-e,0,e,Rr,0,-Math.PI/2,Math.PI/2);c.closePath()};
@@ -339,14 +450,13 @@ function logSpr(l){
  g=k.createLinearGradient(0,-Rr,0,Rr);g.addColorStop(0,'#2a2522');g.addColorStop(.4,'#14110f');g.addColorStop(1,'#050404');k.fillStyle=g;k.fillRect(-w/2,-Rr,w,2*Rr);
  for(let i=0;i<50;i++){const v=150+q()*80|0;k.fillStyle=`rgba(${v},${v-6},${v-12},${.04+q()*.12})`;k.fillRect(-L/2+q()*L,-Rr+q()*2*Rr,Rr*(.1+q()*.5),Rr*(.05+q()*.15))}
  k.restore();cap(k,'#2b211b','#0b0807','rgba(0,0,0,.6)');
- const [G,m]=mkc();m.lineCap='round';m.shadowColor='#ed4712';m.shadowBlur=Rr*.46*D;
- for(let i=0;i<5;i++){let y=-Rr*.8+i*Rr*.4+(q()-.5)*Rr*.2,x=-L/2+e;m.beginPath();m.moveTo(x,y);
-  while(x<L/2-e*2){x+=Rr*(.3+q()*.5);y+=(q()-.5)*Rr*.22;q()<.8?m.lineTo(x,y):m.moveTo(x,y)}
-  m.strokeStyle=`rgba(255,${120+q()*90|0},40,${.5+q()*.4})`;m.lineWidth=Rr*(.05+q()*.07);m.stroke()}
- for(let i=0;i<L/Rr*2.2;i++){const x=-L/2+e+q()*(L-3*e),y=-Rr*.85+q()*Rr*1.3,hh=Rr*(.2+q()*.35);
-  m.beginPath();m.moveTo(x,y);m.lineTo(x+(q()-.5)*Rr*.2,y+hh);m.strokeStyle=`rgba(255,${110+q()*90|0},35,${.4+q()*.4})`;m.lineWidth=Rr*(.04+q()*.05);m.stroke()}
- m.shadowBlur=0;g=m.createLinearGradient(0,Rr*.2,0,Rr*1.25);g.addColorStop(0,'rgba(255,90,20,0)');g.addColorStop(.75,'rgba(226,77,20,.42)');g.addColorStop(1,'rgba(255,60,10,0)');
- m.fillStyle=g;m.fillRect(-L/2+e,Rr*.2,L-2*e,Rr*1.05);
+ const [G,m]=mkc();m.lineCap='round';
+ for(let i=0;i<12;i++){
+  const x=(q()-.5)*L*.72,y=(q()-.35)*Rr*.83,len=Rr*(.12+q()*.56);
+  m.beginPath();m.moveTo(x,y);m.lineTo(x+len*.35,y+(q()-.5)*Rr*.12);m.lineTo(x+len,y+(q()-.5)*Rr*.22);
+  m.strokeStyle=`rgba(255,${82+q()*70|0},27,${.24+q()*.34})`;
+  m.lineWidth=Rr*(.024+q()*.037);m.stroke();
+ }
  const [S,s]=mkc();path(s);s.save();s.clip();
  g=s.createLinearGradient(0,-Rr,0,Rr*.4);g.addColorStop(0,'rgba(255,185,113,.46)');g.addColorStop(.25,'rgba(221,132,83,.18)');g.addColorStop(.53,'rgba(191,112,83,.05)');g.addColorStop(1,'rgba(214,123,69,0)');
  s.fillStyle=g;s.fillRect(-L/2,-Rr,L,Rr*1.4);
@@ -357,14 +467,22 @@ function logSpr(l){
  s.restore();
  return[B,C,G,S]}
 function drawLog(c,l,light){
- const s=l.spr||(l.spr=logSpr(l)),fuel=Math.max(0,l.fuel),k=Math.min(1,fuel/.19),al=Math.min(1,l.age*3)*k,w=s[0].width/D,h=s[0].height/D;
+ const photo=logPhotos?.[l.seed%logPhotos.length];
+ const s=photo||l.spr||(l.spr=logSpr(l)),fuel=Math.max(0,l.fuel),k=Math.min(1,fuel/.19),al=Math.min(1,l.age*3)*k;
+ const w=photo?l.len*U*1.028:s[0].width/D,h=photo?l.d*U*1.25:s[0].height/D;
  const length=.47+.53*Math.pow(fuel,.75),thickness=.42+.58*fuel;
  c.save();c.translate(cx+l.x*U,by-(l.y+l.oy)*U+(1-fuel)*U*.065);c.rotate(l.a+l.oa*Math.min(1,l.oy/1.5));c.scale(l.flip*length,thickness);
+ if(photo&&l.oy<.16){
+  c.globalAlpha=al*(1-l.oy/.16);
+  c.drawImage(logContact,-w*.53,h*.09,w*1.06,h*.65);
+ }
  c.globalAlpha=al;c.drawImage(s[0],-w/2,-h/2,w,h);
- c.globalAlpha=al*Math.max(l.char,(1-light)*.88);c.drawImage(s[1],-w/2,-h/2,w,h);
+ c.globalAlpha=al*(photo?l.char:Math.max(l.char,(1-light)*.88));c.drawImage(s[1],-w/2,-h/2,w,h);
  c.globalCompositeOperation='screen';
- c.globalAlpha=al*light*(.55+.3*l.char)*(.87+.13*Math.sin(T*6+l.seed));c.drawImage(s[3],-w/2,-h/2,w,h);
- c.globalCompositeOperation='lighter';c.globalAlpha=al*Math.min(1,l.heat*l.heat*(.62+.26*Math.sin(T*3+l.seed)));c.drawImage(s[2],-w/2,-h/2,w,h);
+ const lit=photo ? .98*Math.max(.16,1-l.oy*.86) : .55+.3*l.char;
+ c.globalAlpha=al*light*lit*(.89+.11*Math.sin(T*6+l.seed));c.drawImage(s[3],-w/2,-h/2,w,h);
+ c.globalCompositeOperation='lighter';
+ c.globalAlpha=al*l.char*l.heat*l.heat*(.78+.16*Math.sin(T*3+l.seed));c.drawImage(s[2],-w/2,-h/2,w,h);
  c.restore()}
 function addLog(o){
  const used=logs.map(l=>l.slot),i=SL.findIndex((s,j)=>!used.includes(j));if(i<0||logs.length>=MAXL)return false;
@@ -438,6 +556,26 @@ function drawPour(){
 }
 
 /* ---------- Canvas 2D flame fallback (no WebGL2) ---------- */
+const flameBrush=(()=>{
+ const canvas=mk(64,96),c=canvas.getContext('2d');
+ const amber=c.createLinearGradient(0,15,0,96);
+ amber.addColorStop(0,'rgba(190,66,12,0)');
+ amber.addColorStop(.36,'rgba(223,83,12,.55)');
+ amber.addColorStop(.79,'rgba(255,151,40,.8)');
+ amber.addColorStop(1,'rgba(255,106,19,0)');
+ c.fillStyle=amber;
+ c.beginPath();c.moveTo(24,95);c.bezierCurveTo(-5,78,30,48,38,29);
+ c.quadraticCurveTo(43,17,42,7);c.bezierCurveTo(64,46,30,52,48,69);
+ c.bezierCurveTo(61,86,44,94,32,95);c.closePath();c.fill();
+ const cream=c.createRadialGradient(29,76,0,30,75,23);
+ cream.addColorStop(0,'rgba(255,239,194,.91)');
+ cream.addColorStop(.43,'rgba(255,197,93,.72)');
+ cream.addColorStop(1,'rgba(255,135,28,0)');
+ c.fillStyle=cream;
+ c.beginPath();c.moveTo(26,95);c.bezierCurveTo(12,84,21,74,35,57);
+ c.bezierCurveTo(29,71,40,84,29,95);c.closePath();c.fill();
+ return canvas;
+})();
 function fallback(dt,wind,fi){
  fAcc=Math.min(5,fAcc+dt*(reduced?27:65)*fi);
  while(fAcc>1&&FP.length<210){
@@ -448,15 +586,25 @@ function fallback(dt,wind,fi){
   FP.push({
    x:origin+(R()-.5)*U*(.08+.21*heat),y:by-U*(fireRoots[root+1]+(sm?.12:0)),
    vy:-U*(sm?.29:(.34+R()*.49)*(.63+.34*fi)),l:0,m:sm?3.4:.46+R()*.52,
-   s:U*(sm?.16:.10+R()*.09)*(.68+.32*heat),sm,ph:R()*9,origin
+   s:U*(sm?.16:.10+R()*.09)*(.68+.32*heat),sm,ph:R()*9,side:R()<.5?-1:1,origin
   });
  }
  for(let i=FP.length;i--;){const p=FP[i];p.l+=dt;if(p.l>=p.m){FP.splice(i,1);continue}
   const k=p.l/p.m;p.y+=p.vy*dt;p.x+=((p.sm?0:(p.origin-p.x)*.58)+wind*U*(p.sm?.36:.44*k)+Math.sin(T*5+p.ph)*U*.07)*dt;
-  const s=p.sm?p.s*(1+k*2):p.s*(1-k*.7);
-  x2.globalCompositeOperation=p.sm?'source-over':'lighter';x2.globalAlpha=p.sm?.25*Math.sin(k*3.14):(1-k)*.55;
-  x2.drawImage(p.sm?bSmoke:k<.4?bHot:bWarm,p.x-s,p.y-s,s*2,s*2)}
- x2.globalAlpha=1;x2.globalCompositeOperation='source-over'}
+  if(p.sm){
+   const s=p.s*(1+k*2);
+   x2.globalCompositeOperation='source-over';x2.globalAlpha=.25*Math.sin(k*Math.PI);
+   x2.drawImage(bSmoke,p.x-s,p.y-s,s*2,s*2);
+   continue;
+  }
+  const width=p.s*(1.9-k*1.3),height=p.s*(2.2+.4*Math.sin(k*Math.PI));
+  x2.save();x2.translate(p.x,p.y);x2.rotate(k*(wind*.28+.22*Math.sin(T*4+p.ph)));x2.scale(p.side,1);
+  x2.globalCompositeOperation='screen';x2.globalAlpha=Math.sin(Math.PI*k)*(.59+.18*Math.sin(T*7+p.ph));
+  x2.drawImage(flameBrush,-width*.47,-height,width,height);
+  x2.restore();
+ }
+ x2.globalAlpha=1;x2.globalCompositeOperation='source-over';
+}
 
 /* ---------- opt-in synthesized sound ---------- */
 let AC=null,master,nb,bedGain,bedFilter,snd=false;
@@ -625,12 +773,7 @@ function render(dt){
  em+=(Math.min(1,I+boost*.3)-em)*dt*.3;
 
  x0.globalAlpha=1;x0.drawImage(bgD,0,0,W,H);x0.globalAlpha=light;x0.drawImage(bgL,0,0,W,H);x0.globalAlpha=1;
- for(const e of EM){const sn=.5+.5*Math.sin(T*e.sp+e.ph),b=em*(.3+.7*sn*sn),X=cx+e.x*U,Y=by-U*.02+e.y*U,s=e.s*U;
-  x0.fillStyle=`rgb(${30+225*b|0},${14+150*b*b|0},${8+50*b*b*b|0})`;x0.beginPath();
-  for(let j=0;j<6;j++){const a=j/6*6.283;x0.lineTo(X+Math.cos(a)*s*e.v[j],Y+Math.sin(a)*s*.6*e.v[j])}
-  x0.fill()}
- x0.globalCompositeOperation='lighter';x0.globalAlpha=.55*em;x0.drawImage(bWarm,cx-U*.8,by-U*.25,U*1.6,U*.45);
- x0.globalCompositeOperation='source-over';x0.globalAlpha=1;
+ drawEmberBed();
  for(const l of logs)if(!l.front)drawLog(x0,l,light);
 
  if(gl){
