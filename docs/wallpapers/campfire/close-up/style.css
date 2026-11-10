@@ -1,0 +1,178 @@
+:root {
+  color-scheme: dark;
+  --text: #f6eee5;
+  --muted: #ddd0c5;
+  --accent: #ffc799;
+  --outline: rgba(255, 234, 214, 0.32);
+  font: 14px/1.5 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  background: #100d0c;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+.viewer {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #100d0c;
+}
+
+#scene {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(100vw, 150vh);
+  width: min(100vw, 150dvh);
+  height: min(100vh, 66.6667vw);
+  height: min(100dvh, 66.6667vw);
+  transform: translate(-50%, -50%);
+  display: block;
+}
+
+.interface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(11, 8, 7, 0.74), transparent 30%, transparent 67%, rgba(11, 8, 7, 0.54));
+}
+
+.intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
+}
+
+.intro a, .intro button, .dock { pointer-events: auto; }
+
+.back {
+  display: inline-block;
+  padding: 0.35rem 0.55rem;
+  margin-left: -0.55rem;
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+h1 {
+  margin: 0.35rem 0 0.25rem;
+  font-size: clamp(1.4rem, 2.6vw, 2.15rem);
+  line-height: 1.22;
+  letter-spacing: 0.05em;
+}
+
+.description { margin: 0; color: var(--muted); }
+
+.dock {
+  width: min(33rem, calc(100% - 2rem));
+  margin: 0 auto max(1rem, env(safe-area-inset-bottom));
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.85rem;
+  background: rgba(17, 13, 11, 0.87);
+}
+
+.stage-row, .buttons {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.stage-row { justify-content: space-between; }
+.stage { margin: 0; color: var(--accent); font-weight: 650; }
+.time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.buttons { flex-wrap: wrap; }
+
+button, select {
+  min-height: 2.7rem;
+  border: 1px solid var(--outline);
+  border-radius: 0.55rem;
+  padding: 0.35rem 0.65rem;
+  color: var(--text);
+  background: #211a16;
+  font: inherit;
+  white-space: nowrap;
+}
+
+button:enabled, select:enabled { cursor: pointer; }
+button:hover:enabled, select:hover:enabled { background: #38271e; }
+button:disabled, select:disabled { opacity: 0.6; }
+button.primary { color: #2a1309; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+button.primary:hover:enabled { background: #ffdabc; }
+#play { min-width: 5rem; }
+
+.speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+#fullscreen { margin-left: auto; }
+
+#timeline {
+  display: block;
+  width: 100%;
+  min-height: 2.25rem;
+  margin: 0.1rem 0 0.4rem;
+  accent-color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid #ffe1c7;
+  outline-offset: 3px;
+}
+
+.show-settings {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  background: rgba(17, 13, 11, 0.85);
+}
+
+.notice {
+  position: absolute;
+  z-index: 1;
+  top: 48%;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  transform: translate(-50%, -50%);
+  margin: 0;
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.8rem;
+  color: var(--text);
+  text-align: center;
+  background: rgba(17, 13, 11, 0.92);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .description { font-size: 0.87rem; }
+  .dock { width: calc(100% - 1rem); padding: 0.6rem 0.7rem; }
+  .buttons { gap: 0.4rem; }
+  button, select { min-height: 2.75rem; }
+  #fullscreen { margin-left: 0; }
+}
+
+@media (max-height: 390px) {
+  .description { display: none; }
+  h1 { font-size: 1.25rem; }
+  .dock { margin-bottom: max(0.5rem, env(safe-area-inset-bottom)); padding-block: 0.45rem; }
+  #timeline { min-height: 1.5rem; margin: 0.1rem 0; }
+}
