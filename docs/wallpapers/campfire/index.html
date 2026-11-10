@@ -466,12 +466,36 @@ function logSpr(l){
  }
  s.restore();
  return[B,C,G,S]}
-function drawLog(c,l,light){
+function drawLogFlame(c,l,wind,x,y,angle,span,depth,behind){
+ const heat=Math.min(1,(l.heat-.23)/.66)*Math.min(1,l.fuel*3);
+ if(heat<=0)return;
+ const phase=(l.seed%71)*.17+l.slot*2.37+(behind?4.4:0);
+ const pulse=.5+.5*Math.sin(T*6.1+phase+.65*Math.sin(T*2.3+phase));
+ const along=span*((behind?(l.slot===0?.19:-.21):(l.slot===0?-.24:l.slot===1?.20:-.06))+.06*Math.sin(T*2.1+phase));
+ const across=depth*(behind?.42:.24);
+ const rootX=x+along*Math.cos(angle)-across*Math.sin(angle);
+ const rootY=y+along*Math.sin(angle)+across*Math.cos(angle);
+ const width=U*(behind?.15:.14)*(.74+.26*pulse)*(.65+.35*heat);
+ const height=U*(behind?.19+.23*pulse:.09+.20*pulse)*(.38+.62*heat)*(1+boost*.37);
+ const lean=height*(wind*.43+.30*Math.sin(T*4.6+phase))-(behind?.12:.32)*along;
+ if(!behind){
+  c.save();c.translate(rootX,rootY);c.rotate(angle);
+  c.globalCompositeOperation='screen';c.globalAlpha=heat*(.13+.15*pulse);
+  c.drawImage(bWarm,-width,-depth*.37,width*2,depth*.65);
+  c.restore();
+ }
+ drawSurfaceFlame(c,rootX,rootY,width,height,lean,heat*(behind?.82:.94)*(.25+.75*pulse),phase);
+}
+
+function drawLog(c,l,light,wind){
  const photo=logPhotos?.[l.seed%logPhotos.length];
  const s=photo||l.spr||(l.spr=logSpr(l)),fuel=Math.max(0,l.fuel),k=Math.min(1,fuel/.19),al=Math.min(1,l.age*3)*k;
  const w=photo?l.len*U*1.028:s[0].width/D,h=photo?l.d*U*1.25:s[0].height/D;
  const length=.47+.53*Math.pow(fuel,.75),thickness=.42+.58*fuel;
- c.save();c.translate(cx+l.x*U,by-(l.y+l.oy)*U+(1-fuel)*U*.065);c.rotate(l.a+l.oa*Math.min(1,l.oy/1.5));c.scale(l.flip*length,thickness);
+ const x=cx+l.x*U,y=by-(l.y+l.oy)*U+(1-fuel)*U*.065,angle=l.a+l.oa*Math.min(1,l.oy/1.5);
+ const wrap=l.front&&l.land;
+ if(wrap)drawLogFlame(c,l,wind,x,y,angle,w*length,h*thickness,true);
+ c.save();c.translate(x,y);c.rotate(angle);c.scale(l.flip*length,thickness);
  if(photo&&l.oy<.16){
   c.globalAlpha=al*(1-l.oy/.16);
   c.drawImage(logContact,-w*.53,h*.09,w*1.06,h*.65);
@@ -483,7 +507,9 @@ function drawLog(c,l,light){
  c.globalAlpha=al*light*lit*(.89+.11*Math.sin(T*6+l.seed));c.drawImage(s[3],-w/2,-h/2,w,h);
  c.globalCompositeOperation='lighter';
  c.globalAlpha=al*l.char*l.heat*l.heat*(.78+.16*Math.sin(T*3+l.seed));c.drawImage(s[2],-w/2,-h/2,w,h);
- c.restore()}
+ c.restore();
+ if(wrap)drawLogFlame(c,l,wind,x,y,angle,w*length,h*thickness,false);
+}
 function addLog(o){
  const used=logs.map(l=>l.slot),i=SL.findIndex((s,j)=>!used.includes(j));if(i<0||logs.length>=MAXL)return false;
  const s=SL[i];
@@ -576,6 +602,55 @@ const flameBrush=(()=>{
  c.bezierCurveTo(29,71,40,84,29,95);c.closePath();c.fill();
  return canvas;
 })();
+const surfaceFlameFrames=(()=>{
+ // Cache a cycle of curling, translucent flame so every log can use the
+ // same textured light in either renderer without a separate GPU pass.
+ const random=rng(72),grain=Array.from({length:256},random);
+ const clamp=x=>Math.max(0,Math.min(1,x));
+ const smooth=x=>{const t=clamp(x);return t*t*(3-2*t)};
+ const lerp=(a,b,t)=>a+(b-a)*t;
+ const sample=(x,y)=>grain[(y&15)*16+(x&15)];
+ function noise(x,y){
+  const a=Math.floor(x),b=Math.floor(y),u=smooth(x-a),v=smooth(y-b);
+  return lerp(lerp(sample(a,b),sample(a+1,b),u),lerp(sample(a,b+1),sample(a+1,b+1),u),v);
+ }
+ const count=24,w=52,h=72;
+ return Array.from({length:count},(_,frame)=>{
+  const tile=mk(w,h),ctx=tile.getContext('2d'),img=ctx.createImageData(w,h);
+  const t=frame/count,phase=t*2*Math.PI;
+  for(let row=0;row<h;row++){
+   const y=1.04-(row+.5)*1.17/h,rise=Math.max(0,y);
+   const curl=rise*(.24*Math.sin(rise*5.5-phase)+.19*Math.sin(rise*9-2*phase));
+   const width=.58-.47*smooth(rise);
+   for(let col=0;col<w;col++){
+    const x=((col+.5)/w*1.56-.78-curl)/width;
+    const folds=noise(x*1.8+2,rise*5-t*16);
+    const ripple=noise(x*3.1-2,rise*8-t*32);
+    const edge=1-smooth((Math.abs(x)+(folds-.48)*.55-.53)/.52);
+    const tip=1-smooth((y-.60-.22*folds)/.32);
+    const density=edge*tip*smooth((y+.12)/.25)*(.24+.76*smooth((folds+.16*ripple-.20-.12*rise)/.47));
+    const crease=(x+(folds-.5)*1.5)*1.8;
+    const filament=Math.exp(-crease*crease);
+    const hot=clamp(.69*filament+.44*folds-.50*rise);
+    const p=(row*w+col)*4;
+    img.data[p]=lerp(211,255,hot);
+    img.data[p+1]=lerp(76,234,hot);
+    img.data[p+2]=lerp(16,162,hot**1.45);
+    img.data[p+3]=242*density;
+   }
+  }
+  ctx.putImageData(img,0,0);
+  return tile;
+ });
+})();
+function drawSurfaceFlame(c,x,y,width,height,lean,opacity,phase){
+ if(opacity<=.01)return;
+ const frame=Math.floor(T*(14+phase%4)+phase*7)%surfaceFlameFrames.length;
+ c.save();c.translate(x,y);c.transform(width,0,-lean,height,0,0);
+ c.globalAlpha=opacity;
+ c.drawImage(surfaceFlameFrames[frame],-.78,-1.04,1.56,1.17);
+ c.restore();
+}
 function fallback(dt,wind,fi){
  fAcc=Math.min(5,fAcc+dt*(reduced?27:65)*fi);
  while(fAcc>1&&FP.length<210){
@@ -785,7 +860,8 @@ function render(dt){
 
  x2.clearRect(0,0,W,H);
  if(!gl)fallback(dt,wind,fi);
- for(const l of logs)if(l.front)drawLog(x2,l,light);
+ // The closest log hides both the bark and small flames behind it.
+ for(let i=logs.length-1;i>=0;i--)if(logs[i].front)drawLog(x2,logs[i],light,wind);
  drawForegroundStones(light);
  spAcc=Math.min(8,spAcc+(12*I+45*boost)*(reduced?.4:1)*dt);
  while(spAcc>1){spAcc--;fireSpark(1+boost*.4)}
