@@ -33,8 +33,9 @@ label{display:inline-flex;gap:6px;align-items:center;font-size:13px}
 input[type=range]{width:min(42vw,260px);accent-color:#ffc47a}
 output{font-variant-numeric:tabular-nums;min-width:3.2em}
 #status{font-size:12px;opacity:.85;min-height:1.4em;flex:1 1 200px}
-#show{position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;display:none;opacity:.3;background:rgba(14,17,26,.6)}
-#show:hover,#show:focus-visible{opacity:1}
+#show{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:none;min-height:40px;background:rgba(14,17,26,.76)}
+#show:hover,#show:focus-visible,#hide:hover{background:#242a38}
+#hide{margin-left:auto}
 body.hide .panel{display:none}
 body.hide #show{display:block}
 @media (max-width:600px){body{font-size:13px}.panel{left:6px;right:6px;padding:8px 10px}button,select,input[type=number],.pill span{padding:3px 8px}}
@@ -43,12 +44,13 @@ body.hide #show{display:block}
 </head>
 <body>
 <canvas id="c" role="img" aria-label="手続き生成された夕日の風景アニメーション"></canvas>
-<button id="show" type="button" aria-label="操作パネルを表示">操作を表示 (H)</button>
+<button id="show" type="button" aria-controls="panel" aria-expanded="false" title="H / Esc">設定を開く</button>
 <main class="panel" id="panel">
   <div class="row">
     <h1>夕日 / Living Sunset</h1>
-    <p>淡く輝く太陽が約30分かけて沈み、空は青から琥珀へ移ろいます。草原・都市・海岸・山岳の景色はシード値から再現され、URLで共有できます。</p>
+    <p>太陽が約30分かけて沈み、空の色と水面の光が移ろいます。4つの景色と夕焼けの色、雲の量をシード値で再現し、URLで共有できます。</p>
     <a href="../../">← ギャラリーへ</a>
+    <button id="hide" type="button" aria-controls="panel" title="H / Esc">設定を閉じる</button>
   </div>
   <div class="row">
     <fieldset id="scenes"><legend>景色</legend>
@@ -69,7 +71,6 @@ body.hide #show{display:block}
       <option value="0.25">0.25×</option><option value="1" selected>1×（約30分）</option><option value="4">4×</option><option value="20">20×</option><option value="60">60×</option>
     </select></label>
     <button id="fs" type="button" title="F">全画面</button>
-    <button id="hide" type="button" title="H">UIを隠す</button>
     <button id="png" type="button" title="S">PNG保存</button>
     <button id="json" type="button">設定JSON</button>
     <span id="status" role="status" aria-live="polite"></span>
@@ -79,7 +80,7 @@ body.hide #show{display:block}
 'use strict';
 const FRAG=`#version 300 es
 precision highp float;
-uniform vec2 uR;uniform float uT,uS,uSeed,uWind;uniform int uScene;uniform vec4 uP;uniform vec3 uTint;
+uniform vec2 uR;uniform float uT,uS,uSeed,uWind;uniform int uScene;uniform vec4 uP;uniform vec3 uTint,uSky;
 out vec4 o;
 float hz,K,SV,A;vec2 sun;vec3 sunC,HZ;
 float ss(float a,float b,float x){float t=clamp((x-a)/(b-a),0.,1.);return t*t*(3.-2.*t);}
@@ -96,14 +97,14 @@ float ridge(float x){float a=.5,s=0.;for(int i=0;i<6;i++){float n=1.-abs(2.*n1(x
 // sky gradient: zenith blue -> pale mid band -> amber horizon, plus restrained solar glow
 vec3 skyCol(vec2 p){
  float h=max(p.y-hz,0.);
- vec3 zen=mix(vec3(.17,.36,.66),vec3(.05,.09,.23),K);
- vec3 mid=mix(vec3(.56,.70,.84),vec3(.60,.42,.48),K);
- vec3 hor=mix(vec3(1.,.83,.58),vec3(1.,.47,.2),K)*uTint*mix(1.,.5,ss(.82,1.,uS));
+ vec3 zen=mix(vec3(.12,.28,.58),vec3(.035,.07,.19),K)*uSky;
+ vec3 mid=mix(vec3(.43,.58,.79),vec3(.54,.34,.46),K)*uSky;
+ vec3 hor=mix(vec3(1.,.78,.50),vec3(1.,.44,.19),K)*uTint*mix(1.,.5,ss(.82,1.,uS));
  vec3 c=mix(hor,mid,ss(0.,.22+.1*uP.y,h));
  c=mix(c,zen,ss(.1,.8,h));
  vec2 d=p-sun;float dim=1.-.5*ss(.85,1.,uS);
- c+=hor*exp(-length(d*vec2(.55,1.))*4.5)*.42*dim;
- c+=hor*exp(-h*9.)*exp(-abs(d.x)*1.3)*.22*dim;
+ c+=hor*exp(-length(d*vec2(.75,1.))*5.4)*.27*dim;
+ c+=hor*exp(-h*11.)*exp(-abs(d.x)*1.8)*.17*dim;
  return c;}
 
 vec3 meadow(vec2 p,vec3 c){
@@ -141,12 +142,16 @@ vec3 city(vec2 p,vec3 c){
   float wr=h1(wi.x*7.3+wi.y*13.7+id*3.1),wr2=h1(wi.x*3.1+wi.y*5.9+id*1.3+.5);
   vec3 wall=mix(vec3(.13,.13,.17),vec3(.045,.045,.06),k)*(.7+.6*r2)*mix(vec3(1.),sunC,.4)*A;
   wall+=sunC*ss(.8,1.,sun.x>p.x?u:1.-u)*SV*.22;
-  // glass: facade orientation vs. sun direction decides which buildings glint
-  float el=sun.y-hz,ang=(sun.x-p.x)*1.5-el*1.6+.25;
-  float sp=gs((orr+(wr-.5)*.3-ang)*3.5)*SV;
-  sp*=.45+.55*gs(((p.y-base)/ht-(.35+el*1.8+wr*.2))*2.2);
-  vec3 gl=skyCol(vec2(p.x+orr*.25,hz+.06+(p.y-base)*.9))*.38+sunC*sp*1.7;
-  gl=mix(gl,vec3(1.,.74,.42)*.85,step(mix(.985,.55,ss(.45,1.,uS)),wr2));
+  // Adjacent panes reflect the same sun streak, with small differences in the glass.
+  float el=sun.y-hz,ang=(sun.x-p.x)*1.5-el*1.6+.25,orientation=orr-ang;
+  float reflectedY=(p.y-base)/ht-(.35+el*1.45);
+  float faceGlow=gs(orientation*3.)*gs(reflectedY*2.2);
+  float glint=gs((orientation+(wr-.5)*.10)*9.)*gs(reflectedY*5.4);
+  float grazing=pow(clamp(abs(orr)*.86,0.,1.),3.);
+  vec3 gl=skyCol(vec2(p.x+orr*.25,hz+.025+(p.y-base)*1.18))*(.20+.36*grazing);
+  gl+=sunC*(faceGlow*.37+glint*2.25)*SV;
+  float indoor=step(mix(.985,.61,ss(.45,1.,uS)),wr2);
+  gl=mix(gl,vec3(1.,.74,.42)*(.44+.33*wr),indoor*(1.-glint*.5));
   vec3 b=mix(wall,gl,pane*(.6+.4*step(.3,r3)));
   b=mix(b,HZ,(1.-k)*(1.-k)*(.6+.25*uP.y)+.04);
   c=mix(c,b,ss(0.,.0015,dp));}
@@ -157,24 +162,47 @@ vec3 coast(vec2 p,vec3 c){
  float hl=hz-.004+cape*(.03+.12*f1(p.x*4.+3.,5));
  c=mix(c,mix(vec3(.16,.17,.2)*A,HZ,.55+.2*uP.y),ss(0.,.002,hl-p.y)*step(hz,p.y));
  if(p.y<hz){
-  float d=hz-p.y,pz=1./(d+.05),t=uT*.22,fd=ss(0.,.07,d),el=sun.y-hz;
+  float d=hz-p.y,pz=1./(d+.05),t=uT*.22,el=sun.y-hz;
+  float day=ss(-.05,.02,el)*mix(1.,.7,K);
   vec2 w=vec2(p.x*pz*3.,pz*2.);
+  // Long swell, finer ripples and shallow chop move at different rates.
+  float l=n2(w*vec2(.35,1.1)+vec2(t*.2,t*.55)+13.);
   float a=n2(w*vec2(1.,3.)+vec2(t*.5,t*1.6)),b=n2(w*vec2(2.3,7.)+vec2(-t*.4,t*2.3)+7.);
-  float wv=(a+b*.5)/1.5-.5;
-  vec3 rf=skyCol(vec2(p.x+wv*.05*fd,hz+d*.9+.004+wv*.09*fd));
-  vec3 deep=mix(vec3(.06,.15,.22),vec3(.02,.04,.08),K)*A;
-  vec3 wc=mix(deep,rf,mix(.88,.4,ss(0.,.42,d)))*(.93+wv*.25*fd);
-  float gw=(.02+d*(.25+.3*uP.y))*(1.+max(el,0.)*3.);
-  float sp=ss(.5,.78,n2(w*vec2(7.,22.)+vec2(t*2.,t*6.))*(.55+a));
-  wc+=sunC*gs((p.x-sun.x)/gw)*mix(.55,sp*1.9,fd)*ss(-.05,.02,el)*mix(1.,.7,K);
+  float ripple=ss(.012,.10,d),chop=ss(.065,.19,d);
+  vec2 slope=vec2((l-.5)*.14+(a-.5)*.16,(a-.5)*.21+(l-.5)*.16)*ripple;
+  slope+=vec2(-.075,.115)*(b-.5)*chop;
+  vec3 normal=normalize(vec3(slope.x,1.,slope.y));
+  vec3 view=normalize(vec3(-p.x,d,-.9)),light=normalize(vec3(sun.x,max(el,0.),.9));
+  vec3 reflected=reflect(-view,normal);
+  float cv=clamp(dot(normal,view),0.,1.);
+  float fresnel=.02+.98*pow(1.-cv,5.);
+  vec2 skyRay=reflected.xy*(.9/max(reflected.z,.25));
+  vec3 rf=skyCol(vec2(skyRay.x,hz+max(skyRay.y,.003)));
+  vec3 deep=mix(vec3(.04,.10,.15),vec3(.015,.025,.05),K)*A;
+  vec3 wc=mix(deep,rf,.22+.76*fresnel)*(.90+.20*l+.14*(a-.5)*ripple);
+  // A narrow solar lobe rides on a broad reflection. Dark troughs break up the path.
+  float facing=clamp(dot(normal,normalize(view+light+vec3(0.,1e-4,0.))),0.,1.);
+  float swell=mix(.22,1.,ss(.34,.65,l))*(.6+.8*b);
+  float broad=pow(facing,36.)*(.14+.23*fresnel);
+  float spark=pow(facing,310.)*swell*(.62+1.34*fresnel);
+  float sparkle=ss(.44,.82,n2(w*vec2(7.,22.)+vec2(t*1.4,t*4.))*(.55+a));
+  spark*=mix(.50,.28+1.36*sparkle,chop);
+  vec3 glint=sunC*(broad+spark)*day;
+  wc+=glint/(1.+dot(glint,vec3(.21)));
   wc*=1.-.35*cape*exp(-d*14.);
   c=wc;
   float sy=hz-.3-sd*.22+f1(p.x*3.+9.,3)*.04;
   float sw=sy+.014+.012*sin(uT*.3+p.x*2.)+n1(p.x*9.+uT*.08)*.01;
-  vec3 sand=vec3(.36,.3,.23)*mix(vec3(1.),sunC,.5)*A*(.85+.3*n2(p*vec2(300.,700.)));
-  sand=mix(sand,skyCol(vec2(p.x,hz+d*.9))*.7,ss(sy-.07,sy+.015,p.y)*.6);
+  float wet=ss(.075,0.,sw-p.y),gw=.037+d*(.38+.30*uP.y);
+  vec3 sand=vec3(.34,.26,.18)*mix(vec3(1.),sunC,.5)*A*(.78+.37*n2(p*vec2(300.,700.)));
+  sand*=mix(1.,.49,wet);
+  sand=mix(sand,skyCol(vec2(p.x,hz+d*.65))*.62,wet*(.16+.43*fresnel));
+  sand+=sunC*gs((p.x-sun.x)/gw)*wet*wet*(.27+.26*l)*day;
   c=mix(c,sand,ss(.002,-.002,p.y-sw));
-  c+=vec3(.9,.86,.8)*mix(.8,.35,K)*ss(.007,0.,abs(p.y-sw))*(.45+.55*n2(vec2(p.x*70.,uT*.25)));}
+  float foam=n2(vec2(p.x*145.,(p.y-sw)*470.-t*.7));
+  float crest=ss(.0045,.0004,abs(p.y-sw))*mix(.24,.95,ss(.3,.68,foam));
+  float lace=ss(.012,.001,abs(p.y-sw-.006))*ss(.62,.87,foam)*.42;
+  c+=mix(vec3(.60,.68,.76),sunC,.42)*mix(.62,.23,K)*(crest+lace);}
  return c;}
 
 float mh(float x,float fi,float k){
@@ -201,27 +229,32 @@ void main(){
  float el=mix(.34,-.075,uS);
  sun=vec2(uP.x*min(1.,uR.x/uR.y)+(uS-.5)*.1*uWind,hz+el);
  K=ss(0.,.9,uS);SV=ss(-.035,.03,el);A=mix(1.,.4,ss(.35,1.,uS));
- sunC=mix(vec3(1.,.96,.84),vec3(1.,.62,.3),ss(.14,-.02,el))*mix(vec3(1.),uTint,.5);
+ sunC=mix(vec3(1.,.97,.90),vec3(1.,.59,.28),ss(.14,-.02,el))*mix(vec3(1.),uTint,.72);
  HZ=skyCol(vec2(p.x,hz+.02));
  vec3 c=skyCol(p);float h=p.y-hz;
  if(h>0.){
-  float d=length(p-sun),disk=ss(.031,.027,d),G=ss(-.09,0.,el),hf=ss(0.,.06,h);
-  c=mix(c,sunC*2.4,disk);
+  vec2 ds=p-sun;
+  float d=length(ds),solarRadius=length(vec2(ds.x,ds.y/mix(.82,1.,ss(0.,.12,el))));
+  float disk=ss(.027,.024,solarRadius),G=ss(-.09,0.,el),hf=ss(0.,.06,h);
+  vec3 solarDisc=mix(sunC*1.62,mix(sunC,vec3(1.),.28)*2.45,ss(.025,.006,solarRadius));
+  c=mix(c,solarDisc,disk);
   c+=sunC*(exp(-d*24.)*.28+exp(-d*7.)*.1)*G;
   float pz=1./(h+.25);
   vec2 q=vec2(p.x*pz,pz*2.4)*uP.w+vec2(uT*.01*uWind,uT*.002);
   vec3 lit=mix(vec3(1.,.93,.8),vec3(1.,.55,.34),K)*mix(vec3(1.),uTint,.6)*mix(1.,.6,ss(.85,1.,uS));
-  vec3 shd=mix(vec3(.5,.54,.64),vec3(.2,.18,.28),K);
+  vec3 shd=mix(vec3(.5,.54,.64),vec3(.2,.18,.28),K)*uSky;
+  lit*=mix(vec3(1.),uTint,.56);
   float ci=fbm(vec2(q.x*.5+uT*.004,q.y*3.)+41.);
-  c=mix(c,mix(c,lit,.7),ss(.5,.85,ci)*.35*hf);
+  c=mix(c,mix(c,lit,.7),ss(.5,.85,ci)*mix(.38,.11,ss(.30,.70,uP.z))*hf);
   vec2 ld=normalize(sun-p+1e-4)*.2;
   float n=fbm(q),nl=fbm(q+vec2(ld.x,-ld.y));
   float dn=ss(uP.z,uP.z+.28,n),li=clamp((n-nl)*3.5+.45,0.,1.);
-  vec3 cc=mix(shd,lit,li*(.4+.6*exp(-d*2.)))+sunC*exp(-d*9.)*.4*(1.-dn*.5)*G;
+  float edge=ss(.025,.12,dn)*(1.-ss(.24,.48,dn));
+  vec3 cc=mix(shd,lit,li*(.4+.6*exp(-d*2.)))+sunC*exp(-d*9.)*(.33+.42*edge)*(1.-dn*.5)*G;
   c=mix(c,cc,dn*.78*hf*(1.-.45*disk));}
  if(uScene==0)c=meadow(p,c);else if(uScene==1)c=city(p,c);else if(uScene==2)c=coast(p,c);else c=mountains(p,c);
- c*=1.-.18*dot(p,p);
- c=1.-exp(-c*1.35);
+ c=max(c*(1.-.12*dot(p,p)),vec3(0.))*.86;
+ c=(c*(2.51*c+.03))/(c*(2.43*c+.59)+.14);
  c+=(h2(gl_FragCoord.xy)-.5)/255.;
  o=vec4(c,1.);}`;
 const VERT=`#version 300 es
@@ -231,11 +264,28 @@ const SC=['meadow','city','coast','mountains'],JP={meadow:'草原',city:'都市'
 const CANON='https://scott2121.github.io/wallpaper-sites/wallpapers/living-sunset/',CYCLE=1800;
 const $=id=>document.getElementById(id);
 const rng=a=>()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
-const palette=seed=>{const r=rng(seed);return{sunX:(r()-.5)*.6,haze:r(),cov:.44+r()*.16,cs:.9+r()*.9,wind:r()<.5?-1:1,tint:[1,.92+r()*.12,.82+r()*.32],fseed:1+r()*90}};
+const atmospherePalettes=[
+  {tint:[1.04,.95,.82],sky:[.86,1.01,1.20]},
+  {tint:[1.06,.86,.77],sky:[1.03,.99,1.06]},
+  {tint:[1.03,.83,1.27],sky:[1.14,.91,1.08]},
+  {tint:[.98,.85,1.37],sky:[1.09,.89,1.22]},
+  {tint:[1.00,1.08,1.04],sky:[.89,1.06,1.09]}
+];
+function palette(seed){
+  const r=rng(seed),weather=rng(seed^0x6a09e667);
+  const sunX=(r()-.5)*.6,haze=r(),redShift=r(),cs=.9+r()*.9,wind=r()<.5?-1:1;
+  const warmShift=r(),blueShift=r(),fseed=1+r()*90;
+  const mood=atmospherePalettes[Math.floor(weather()*atmospherePalettes.length)];
+  const cov=.28+.47*Math.pow(weather(),1.12);
+  return {sunX,haze,cov,cs,wind,fseed,
+    tint:[mood.tint[0]*(.98+redShift*.04),mood.tint[1]*(.96+warmShift*.08),mood.tint[2]*(.94+blueShift*.12)],
+    sky:mood.sky.map(channel=>channel*(.96+weather()*.08))};
+}
 
 const q=new URLSearchParams(location.search),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const querySeed = q.get('seed');
-const initialSeed = /^\d+$/.test(querySeed ?? '') && Number(querySeed) <= 2147483647 ? Number(querySeed) : 48271;
+const randomSeed=()=>Math.floor(Math.random()*2147483648);
+const initialSeed = /^\d+$/.test(querySeed ?? '') && Number(querySeed) <= 2147483647 ? Number(querySeed) : randomSeed();
 const st={seed:initialSeed,scene:SC.includes(q.get('scene'))?q.get('scene'):'meadow',
   phase:.28,speed:1,paused:reduced,keep:true};
 let pal=palette(st.seed),cv=$('c'),gl=null,x2=null,U={},mt=0,raf=0,last=0;
@@ -254,7 +304,7 @@ function initGL(){
     gl.linkProgram(pr);
     if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(pr));
     gl.useProgram(pr);
-    for(const n of['uR','uT','uS','uSeed','uWind','uScene','uP','uTint'])U[n]=gl.getUniformLocation(pr,n);
+    for(const n of['uR','uT','uS','uSeed','uWind','uScene','uP','uTint','uSky'])U[n]=gl.getUniformLocation(pr,n);
     return true;
   }catch(e){console.warn(e);gl=null;return false}
 }
@@ -277,6 +327,7 @@ function draw(){
     gl.uniform2f(U.uR,cv.width,cv.height);gl.uniform1f(U.uT,mt);gl.uniform1f(U.uS,prog());
     gl.uniform1f(U.uSeed,pal.fseed);gl.uniform1f(U.uWind,pal.wind);gl.uniform1i(U.uScene,SC.indexOf(st.scene));
     gl.uniform4f(U.uP,pal.sunX,pal.haze,pal.cov,pal.cs);gl.uniform3fv(U.uTint,pal.tint);
+    gl.uniform3fv(U.uSky,pal.sky);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }else if(x2)draw2d();
 }
@@ -286,17 +337,19 @@ function draw2d(){
   const x=x2,w=cv.width,h=cv.height,s=prog(),K=Math.min(1,s/.9),r=rng(st.seed^0x9e37),P=pal,amb=1-.6*Math.max(0,(s-.35)/.65);
   const mix=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t),rgb=(c,a=1)=>`rgba(${c.map(v=>Math.round(Math.max(0,Math.min(1,v))*255))},${a})`;
   const hz=h*{meadow:.63,city:.78,coast:.57,mountains:.7}[st.scene];
-  const zen=mix([.17,.36,.66],[.05,.09,.23],K),mid=mix([.56,.7,.84],[.6,.42,.48],K),
-    hor=mix([1,.83,.58],[1,.47,.2],K).map((v,i)=>v*P.tint[i]*(1-.5*Math.max(0,(s-.82)/.18))),sunc=mix([1,.96,.84],[1,.62,.3],K);
+  const zen=mix([.14,.29,.59],[.04,.08,.2],K).map((v,i)=>v*P.sky[i]),mid=mix([.44,.58,.78],[.53,.36,.47],K).map((v,i)=>v*P.sky[i]);
+  const hor=mix([1,.78,.50],[1,.44,.19],K).map((v,i)=>v*P.tint[i]*(1-.5*Math.max(0,(s-.82)/.18)));
+  const sunc=mix([1,.97,.90],[1,.59,.28],K).map((v,i)=>v*(.28+.72*P.tint[i]));
   let g=x.createLinearGradient(0,0,0,hz);g.addColorStop(0,rgb(zen));g.addColorStop(.62,rgb(mid));g.addColorStop(1,rgb(hor));
   x.fillStyle=g;x.fillRect(0,0,w,h);
   const sx=w/2+(P.sunX*Math.min(1,w/h)+(s-.5)*.1*P.wind)*h,sy=hz-(.34-.415*s)*h,R=h*.029;
   g=x.createRadialGradient(sx,sy,0,sx,sy,h*.5);g.addColorStop(0,rgb(hor,.55));g.addColorStop(1,rgb(hor,0));x.fillStyle=g;x.fillRect(0,0,w,hz);
   g=x.createRadialGradient(sx,sy,R*.9,sx,sy,R*3);g.addColorStop(0,rgb(sunc,.5));g.addColorStop(1,rgb(sunc,0));x.fillStyle=g;x.fillRect(0,0,w,hz);
   x.fillStyle=rgb(mix(sunc,[1,1,1],.35));x.beginPath();x.arc(sx,sy,R,0,7);x.fill();
-  for(let i=0;i<14;i++){
-    const cx=(((r()+mt*.0015*P.wind)%1)+1)%1*w*1.5-w*.25,cy=r()*hz*.85,rw=(.12+r()*.22)*w,lit=mix(mix([.5,.54,.64],[.2,.18,.28],K),hor,.35+.5*cy/hz);
-    x.save();x.translate(cx,cy);x.scale(1,.16);g=x.createRadialGradient(0,0,0,0,0,rw);g.addColorStop(0,rgb(lit,.5));g.addColorStop(1,rgb(lit,0));
+  const cloudRandom=rng(st.seed^0xbb67ae85),cloudCount=Math.round(3+39*(.75-P.cov));
+  for(let i=0;i<cloudCount;i++){
+    const cx=(((cloudRandom()+mt*.0015*P.wind)%1)+1)%1*w*1.5-w*.25,cy=cloudRandom()*hz*.85,rw=(.12+cloudRandom()*.22)*w,lit=mix(mix([.5,.54,.64],[.2,.18,.28],K),hor,.35+.5*cy/hz);
+    x.save();x.translate(cx,cy);x.scale(1,.16);g=x.createRadialGradient(0,0,0,0,0,rw);g.addColorStop(0,rgb(lit,.26+.5*(.75-P.cov)));g.addColorStop(1,rgb(lit,0));
     x.fillStyle=g;x.beginPath();x.arc(0,0,rw,0,7);x.fill();x.restore();}
   const layer=(y0,amp,f,col,sharp)=>{const ph=[r()*9,r()*9,r()*9,r()*9];x.fillStyle=rgb(col);x.beginPath();x.moveTo(0,h);
     for(let i=0;i<=w;i+=3){const u=i/h*f;let v=0;for(let o=0;o<4;o++)v+=Math.sin(u*(1.3+o*1.9)+ph[o])/(o+1);
@@ -349,12 +402,17 @@ function sync(){
 function setSeed(v){st.seed=Math.min(2147483647,Math.max(0,Math.floor(Number(v))||0));pal=palette(st.seed);sync()}
 function setScene(s){st.scene=s;sync();say(`景色: ${JP[s]} / シード ${st.seed}`)}
 function regen(){
-  const seed=(Math.random()*2147483647)>>>0;
+  const seed=randomSeed();
   if(!st.keep)st.scene=SC[(SC.indexOf(st.scene)+1+seed%3)%4];
   setSeed(seed);say(`再生成しました: ${JP[st.scene]} / シード ${st.seed}`);
 }
 function togglePause(){st.paused=!st.paused;last=performance.now();sync();say(st.paused?'停止中':'再生中')}
-function toggleUI(force){const hid=document.body.classList.toggle('hide',force);(hid?$('show'):$('hide')).focus({preventScroll:true})}
+function toggleUI(force){
+  const hidden=force??!document.body.classList.contains('hide');
+  document.body.classList.toggle('hide',hidden);
+  $('show').setAttribute('aria-expanded',String(!hidden));
+  (hidden?$('show'):$('hide')).focus({preventScroll:true});
+}
 function fullscreen(){
   const d=document,el=d.documentElement,cur=d.fullscreenElement||d.webkitFullscreenElement;
   const rq=el.requestFullscreen||el.webkitRequestFullscreen,ex=d.exitFullscreen||d.webkitExitFullscreen;
@@ -399,7 +457,11 @@ $('show').onclick=()=>toggleUI(false);
 $('png').onclick=savePNG;
 $('json').onclick=saveJSON;
 addEventListener('keydown',e=>{
-  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.ctrlKey||e.metaKey||e.altKey||e.repeat)return;
+  if(e.key==='Escape'){
+    if(!document.fullscreenElement&&!document.webkitFullscreenElement)toggleUI();
+    return;
+  }
   const t=e.target,tag=t.tagName,typing=tag==='SELECT'||(tag==='INPUT'&&t.type==='number');
   if(typing)return;
   const k=e.key.toLowerCase();
@@ -415,7 +477,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnim
 
 init();resize();sync();
 if(reduced)say('視覚効果を減らす設定のため停止中です。「再生」で開始できます。');
-else if(!$('status').textContent)say('キー操作: Space 停止 / 1–4 景色 / R 再生成 / H UI / F 全画面 / S PNG');
+else if(!$('status').textContent)say('キー操作: Space 停止 / 1–4 景色 / R 再生成 / H・Esc 設定 / F 全画面 / S PNG');
 </script>
 </body>
 </html>
