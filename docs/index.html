@@ -9,6 +9,7 @@ description: "夕日や焚き火など、ブラウザで眺める動く壁紙の
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{{ page.description | escape }}">
   <meta name="color-scheme" content="dark">
+  <meta name="google-site-verification" content="LIaEwluTR3cLlstxE1pMdbOYvIEFBtx3pI9ClQ5Ue_w">
   <link rel="canonical" href="{{ '/' | absolute_url }}">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="壁紙アトリエ">
@@ -49,13 +50,28 @@ description: "夕日や焚き火など、ブラウザで眺める動く壁紙の
         {% endfor %}
       </div>
     </section>
-    <section class="contribute" aria-labelledby="contribute-heading">
-      <div>
-        <h2 id="contribute-heading">壁紙を追加する</h2>
-        <p>作った壁紙を、GitHub の Pull Request でギャラリーに追加できます。</p>
-      </div>
-      <a class="button" href="https://github.com/scott2121/wallpaper-sites/blob/main/CONTRIBUTING.md">追加方法を見る ↗</a>
+    <section class="contribute contribute-guide" aria-labelledby="contribute-heading">
+      <h2 id="contribute-heading">壁紙を追加する</h2>
+      <p>GitHub から自作の壁紙を投稿できます。Pull Request がマージされると、この一覧に掲載されます。</p>
+      <ol class="contribute-steps">
+        <li>
+          <h3>リポジトリをフォークする</h3>
+          <p>自分の GitHub アカウントにコピーを作り、作業用のブランチを作成します。</p>
+          <a href="https://github.com/scott2121/wallpaper-sites/fork">GitHub でフォークする ↗</a>
+        </li>
+        <li>
+          <h3>壁紙と掲載情報を追加する</h3>
+          <p><code>docs/wallpapers/</code> に壁紙を置き、名前と説明を一覧のデータに登録します。</p>
+          <a href="https://github.com/scott2121/wallpaper-sites/blob/main/CONTRIBUTING.md">詳しい追加手順を見る ↗</a>
+        </li>
+        <li>
+          <h3>Pull Request を送る</h3>
+          <p>自分のブランチに変更をプッシュし、このリポジトリの <code>main</code> に追加を提案します。</p>
+          <a href="https://github.com/scott2121/wallpaper-sites/compare">GitHub で変更を比較する ↗</a>
+        </li>
+      </ol>
     </section>
+    {% include report-issue.html %}
   </main>
   <footer class="frame">WALLPAPER ATELIER · ブラウザで動く壁紙</footer>
 </body>

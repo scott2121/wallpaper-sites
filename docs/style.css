@@ -110,9 +110,25 @@ h3 span { display: inline-block; margin-left: .65rem; color: var(--muted); font-
   border-radius: 1rem;
 }
 .contribute h2, .contribute p { margin: 0; }
+.contribute-guide { display: block; }
+.contribute-guide > p { margin-top: .35rem; }
+.contribute-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 1.4rem 0 0;
+  padding: 1rem 0 0 1.3rem;
+  border-top: 1px solid var(--line);
+}
+.contribute-steps li { padding-left: .25rem; }
+.contribute-steps li::marker { color: var(--warm); font-weight: 700; }
+.contribute-steps h3 { font-size: 1rem; }
+.contribute-steps p { margin-block: .35rem .5rem; }
+.contribute-steps a { color: var(--warm); font-size: .82rem; font-weight: 650; }
+.contribute-steps code { overflow-wrap: anywhere; }
 footer { padding-block: 2rem; color: var(--muted); font-size: .75rem; }
 
 @media (max-width: 37rem) {
-  .collection { grid-template-columns: 1fr; }
+  .collection, .contribute-steps { grid-template-columns: 1fr; }
   .contribute { align-items: flex-start; flex-direction: column; }
 }

@@ -1,0 +1,47 @@
+name: 問題を報告
+description: 壁紙やギャラリーで見つけた不具合を報告する
+body:
+  - type: markdown
+    attributes:
+      value: 報告は公開されます。個人情報や認証情報は入力せず、添付画像にも含まれないことを確認してください。
+  - type: input
+    id: affected-page
+    attributes:
+      label: 問題が起きた場所
+      placeholder: 例：ギャラリー一覧、夕日、焚き火
+    validations:
+      required: true
+  - type: input
+    id: page-url
+    attributes:
+      label: ページのURL
+      placeholder: https://scott2121.github.io/wallpaper-sites/
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順
+      description: 問題が起きるまでの操作を順番に書いてください。
+    validations:
+      required: true
+  - type: textarea
+    id: actual-result
+    attributes:
+      label: 実際に起きたこと
+    validations:
+      required: true
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: 期待した動作
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 端末・OS・ブラウザ
+      placeholder: 例：iPhone 16、iOS 26、Safari
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: スクリーンショット
+      description: 画面の状態がわかる画像があれば添付してください。
