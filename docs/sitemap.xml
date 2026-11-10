@@ -1,0 +1,12 @@
+---
+layout: null
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{{ '/' | absolute_url | xml_escape }}</loc></url>
+  {% assign published = site.data.wallpapers | where: 'status', 'published' %}
+  {% for wallpaper in published %}
+  {% assign id = wallpaper.id | uri_escape %}
+  <url><loc>{{ '/wallpapers/' | append: id | append: '/' | absolute_url | xml_escape }}</loc></url>
+  {% endfor %}
+</urlset>

@@ -1,0 +1,62 @@
+---
+title: "動く壁紙の一覧｜夕日・焚き火｜壁紙アトリエ"
+description: "夕日や焚き火など、ブラウザで眺める動く壁紙の一覧。開発中の作品を確認でき、自作の壁紙を GitHub から追加できます。"
+---
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ page.description | escape }}">
+  <meta name="color-scheme" content="dark">
+  <link rel="canonical" href="{{ '/' | absolute_url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="壁紙アトリエ">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:title" content="{{ page.title | escape }}">
+  <meta property="og:description" content="{{ page.description | escape }}">
+  <meta property="og:url" content="{{ '/' | absolute_url }}">
+  <title>{{ page.title | escape }}</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="bar frame">
+    <a class="wordmark" href="./"><span aria-hidden="true">◈</span> WALLPAPER ATELIER</a>
+    <a class="quiet" href="https://github.com/scott2121/wallpaper-sites">GitHub ↗</a>
+  </header>
+  <main class="frame">
+    <section class="hero" aria-labelledby="title">
+      <p class="eyebrow">LIVE WALLPAPERS / WEB GALLERY</p>
+      <h1 id="title">壁紙アトリエ</h1>
+      <p class="intro">光や風景の変化を、ブラウザで眺める。<br>動く壁紙を集めるギャラリーです。</p>
+    </section>
+    <section aria-labelledby="collection-heading">
+      <h2 id="collection-heading">動く壁紙の一覧</h2>
+      <div class="collection">
+        {% for wallpaper in site.data.wallpapers %}
+        <article class="card">
+          <div class="card-art" data-scene="{{ wallpaper.id | escape }}" aria-hidden="true"></div>
+          <div class="card-details">
+            <h3>{{ wallpaper.title | escape }}{% if wallpaper.subtitle %}<span>{{ wallpaper.subtitle | escape }}</span>{% endif %}</h3>
+            <p>{{ wallpaper.description | escape }}</p>
+            {% if wallpaper.status == 'published' %}
+            <a class="button" href="./wallpapers/{{ wallpaper.id | uri_escape }}/" aria-label="{{ wallpaper.title | escape }}の壁紙を開く">壁紙を開く →</a>
+            {% else %}
+            <span class="status">計画中</span>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="contribute" aria-labelledby="contribute-heading">
+      <div>
+        <h2 id="contribute-heading">壁紙を追加する</h2>
+        <p>作った壁紙を、GitHub の Pull Request でギャラリーに追加できます。</p>
+      </div>
+      <a class="button" href="https://github.com/scott2121/wallpaper-sites/blob/main/CONTRIBUTING.md">追加方法を見る ↗</a>
+    </section>
+  </main>
+  <footer class="frame">WALLPAPER ATELIER · ブラウザで動く壁紙</footer>
+</body>
+</html>

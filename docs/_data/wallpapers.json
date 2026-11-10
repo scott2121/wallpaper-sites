@@ -1,0 +1,16 @@
+[
+  {
+    "id": "living-sunset",
+    "title": "夕日",
+    "subtitle": "Living Sunset",
+    "description": "草原や街に沈む夕日。時間とともに空の色が変わり、ガラスや水面に光が映ります。",
+    "status": "planned"
+  },
+  {
+    "id": "campfire",
+    "title": "焚き火",
+    "subtitle": "Campfire",
+    "description": "ゆらぐ炎と舞い上がる火の粉。薪をくべながら、火が育つ様子を眺めます。",
+    "status": "planned"
+  }
+]
