@@ -12,6 +12,14 @@
 
 Claude Fable 5.2 が生成した実装をもとにしています。`forest-pit.webp` は内蔵の画像生成で作成した森と石の背景です。石と地面の明暗を火勢に合わせ、手前の石で薪の下端や火の根元を隠します。外部の画像、音声、ライブラリは読み込みません。
 
+`log-materials.webp` は内蔵の画像生成で作成した薪の素材です。2種類の薪がそれぞれ、燃焼に合わせて樹皮が残る状態から黒く炭化した状態へと移り変わります。薪と熾火の割れ目は火勢に合わせて明滅し、炎は風に沿ってなびきます。
+
+<details>
+<summary>薪の素材を生成した指示の概要</summary>
+
+Create a transparent two-by-two atlas of photoreal split firewood with two different bark and end-grain patterns. Match the exact silhouette and view of the fresh and charred versions in each row. Show cracked bark, rough split wood, and irregular charcoal fissures. Use neutral lighting without fire, glow, smoke, or cast shadows.
+
+</details>
 
 <details>
 <summary>石と地面の背景を生成した指示</summary>
